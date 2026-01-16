@@ -42,7 +42,17 @@
 !   21-23: gradient phaseparameter
 !   25-27: stiffness in principal direction
 !   29: -
-!   30: H
+!   30: H_sph
+!   31: H_dev
+!   32: 
+!   33: 
+!   34: 
+!   35: 
+!   36: 
+!   37: 
+!   38:
+!   39: 
+!   40:  
 !
 ! material parameters:  
 !
@@ -198,7 +208,6 @@ MODULE PhaseField_module
       INTEGER(kind=AbqIK), PARAMETER :: n_debug_inc = 10
       INTEGER(kind=AbqIK), PARAMETER :: n_debug_ip = 1
       
-      
       INTEGER(kind=AbqIK) :: debug_elements(n_debug_elem)
       INTEGER(kind=AbqIK) :: debug_increments(n_debug_inc)
       INTEGER(kind=AbqIK) :: debug_ipoints(n_debug_ip)
@@ -207,11 +216,10 @@ MODULE PhaseField_module
       DATA debug_elements /552/
       DATA debug_increments /1,2,3,4,5,500,501,502,503,504/
       DATA debug_ipoints /1/
-
       ! end pure debug Variables
 
       REAL(kind=AbqRK) :: eps(3,3), eps_old(3,3) !eps old for staggered MP, H(eps_n)
-      REAL(kind=AbqRK) :: delta, stran_per(ntens), stress_per(ntens), Ct_temp1(ntens,ntens), Ct_temp2(ntens,ntens), totalPotential,bulkedVar, csedVar, vdedVar, degVar, per, stress_num(ntens), H, Hn, ElasticEnergytens
+      REAL(kind=AbqRK) :: delta, stran_per(ntens), stress_per(ntens), Ct_temp1(ntens,ntens), Ct_temp2(ntens,ntens), totalPotential,bulkedVar, csedVar, vdedVar, degVar, per, stress_num(ntens), H_sph, H_dev, Hn_sph, Hn_dev, ElasticEnergytens_sph, ElasticEnergytens_dev
       INTEGER(kind=AbqIK), ALLOCATABLE :: pos_p(:)
       REAL(kind=AbqRK), ALLOCATABLE :: phase(:), phase_old(:), grad_phase(:,:)
       REAL(kind=AbqRK), ALLOCATABLE :: parHFEDMatrix(:)
@@ -473,37 +481,67 @@ MODULE PhaseField_module
       ! H_n (aus letztem Konvergiertem eps_n)  -> staggered nach MP
       !
       IF (isMonolithic) THEN
-		ElasticEnergytens = HFEDtens_H(eps,nHFEDpar,parHFEDMatrix) ! Monolithic
+		ElasticEnergytens_sph = HFEDtens_H_sph(eps,nHFEDpar,parHFEDMatrix) ! Monolithic
+		ElasticEnergytens_dev = HFEDtens_H_dev(eps,nHFEDpar,parHFEDMatrix) ! Monolithic
 	  ELSEIF (isBFGS) THEN
-		ElasticEnergytens = HFEDtens_H(eps,nHFEDpar,parHFEDMatrix) ! BFGS
+		ElasticEnergytens_sph = HFEDtens_H_sph(eps,nHFEDpar,parHFEDMatrix) ! BFGS
+		ElasticEnergytens_dev = HFEDtens_H_dev(eps,nHFEDpar,parHFEDMatrix) ! BFGS
 	  ELSEIF (isStaggered) THEN
-		ElasticEnergytens = HFEDtens_H(eps_old,nHFEDpar,parHFEDMatrix) !staggered MP
+		ElasticEnergytens_sph = HFEDtens_H_sph(eps_old,nHFEDpar,parHFEDMatrix) !staggered MP
+		ElasticEnergytens_dev = HFEDtens_H_dev(eps_old,nHFEDpar,parHFEDMatrix) !staggered MP
       END IF
       !History Update
-      Hn = svr(30)
-      H = zero
+      Hn_sph = svr(30)
+      Hn_dev = svr(31)
+      H_sph = zero
+      H_dev = zero
       
       
       IF (is_print_elem .AND. is_print_inc .AND. is_print_ip) THEN
          write(6,*) '    === History - Feld ==='
          WRITE(6,*) "---------------------------------------"
-	     WRITE(6,*) 'ElasticEnergytens: ', ElasticEnergytens
-         WRITE(6,*) 'History_n: ', Hn
+	     WRITE(6,*) 'ElasticEnergytens_sph : ', ElasticEnergytens_sph 
+	     WRITE(6,*) 'ElasticEnergytens_dev : ', ElasticEnergytens_dev
+	     WRITE(6,*) 'ElasticEnergytens: ', ElasticEnergytens_sph + ElasticEnergytens_dev
+         WRITE(6,*) 'History_n_sph: ', Hn_sph
+         WRITE(6,*) 'History_n_dev: ', Hn_dev
+	 WRITE(6,*) 'History_n: ', Hn_sph + Hn_dev
+         WRITE(6,*) "----------------------------------------"
+         WRITE(6,*) 'phase: ', phase
          WRITE(6,*) "----------------------------------------"
       END IF 
       
-      IF (ElasticEnergytens .GT. Hn) THEN
-        H = ElasticEnergytens
+      IF (ElasticEnergytens_sph .GT. Hn_sph) THEN
+        H_sph = ElasticEnergytens_sph
+        H_dev = ElasticEnergytens_dev
       ELSE
-        H = Hn
+        H_sph = Hn_sph
+        H_dev = Hn_dev
       END IF 
       
-      svr(30) = H
+      svr(30) = H_sph
+      svr(31) = H_dev
       
       ! compute all first derivatives
       
+	  IF (is_print_elem .AND. is_print_inc .AND. is_print_ip) THEN
+	     WRITE(6,*) "---------------------------------------"
+	     WRITE(6,*) "-------VOR STRESSES------"
+	     WRITE(6,*) "---------------------------------------"
+	     WRITE(6,*) "---------------------------------------"
+	     WRITE(6,*) 'elastic stresses:'
+	     WRITE(6,'(F20.15)') (stress(i1), i1=1,pos_p(1)-1)
+	     WRITE(6,*) ''
+	     WRITE(6,*) 'phase stresses:'
+	     WRITE(6,'(F20.15)') (stress(pos_p(1)))
+	     WRITE(6,*) 'gradphase stresses:'
+	     WRITE(6,'(F20.15)') (stress(i1), i1=pos_p(1)+1, ntens)
+	     WRITE(6,*) 'H:', H_sph + H_dev
+	     WRITE(6,*) ''
+	     WRITE(6,'(F20.15)') (stress(pos_p(1)))
+	  END IF
       ! generalized stresses
-      stress = stresses(D,ntens,nphase,pos_p,prop_solver,eps,eps_old,phase,phase_old,dtime,grad_phase,nHFEDpar,nCSEDpar,nVDEDpar,parHFEDMatrix,parCSEDMatrix,parVDEDMatrix,H,isMonolithic, isBFGS, isStaggered, isCouplingterms)
+      stress = stresses(D,ntens,nphase,pos_p,prop_solver,eps,eps_old,phase,phase_old,dtime,grad_phase,nHFEDpar,nCSEDpar,nVDEDpar,parHFEDMatrix,parCSEDMatrix,parVDEDMatrix,H_sph,H_dev,isMonolithic, isBFGS, isStaggered, isCouplingterms)
       ! energetic quantities
       
 	  IF (is_print_elem .AND. is_print_inc .AND. is_print_ip) THEN
@@ -586,14 +624,14 @@ MODULE PhaseField_module
           grad_phase(:,:) = gradientOfPhaseParameter(nphase,D,pos_p,ntens,stran_per)
           !
           ! generalised stresses
-          stress_per = stresses(D,ntens,nphase,pos_p,prop_solver,eps,eps_old,phase,phase_old,dtime,grad_phase,nHFEDpar,nCSEDpar,nVDEDpar,parHFEDMatrix,parCSEDMatrix,parVDEDMatrix,H,isMonolithic,isBFGS,isStaggered,isCouplingterms)
+          stress_per = stresses(D,ntens,nphase,pos_p,prop_solver,eps,eps_old,phase,phase_old,dtime,grad_phase,nHFEDpar,nCSEDpar,nVDEDpar,parHFEDMatrix,parCSEDMatrix,parVDEDMatrix,H_sph,H_dev,isMonolithic,isBFGS,isStaggered,isCouplingterms)
           ! tangent
           Ct(i1,1:ntens) = (stress_per(1:ntens)-stress(1:ntens))/delta
         END DO
 
       ELSE
         ! analytical material tangent
-        Ct = tangent(D,ntens,nphase,pos_p,prop_solver,eps,eps_old,phase,phase_old,dtime,grad_phase,nHFEDpar,nCSEDpar,nVDEDpar,parHFEDMatrix,parCSEDMatrix,parVDEDMatrix,H,isMonolithic,isBFGS,isStaggered,isCouplingterms)
+        Ct = tangent(D,ntens,nphase,pos_p,prop_solver,eps,eps_old,phase,phase_old,dtime,grad_phase,nHFEDpar,nCSEDpar,nVDEDpar,parHFEDMatrix,parCSEDMatrix,parVDEDMatrix,H_sph,H_dev,isMonolithic,isBFGS,isStaggered,isCouplingterms)
       END IF
 	  
 	  
@@ -607,27 +645,27 @@ MODULE PhaseField_module
 !~ 		 WRITE(6,*) "----------------------------------------"
 !~ 	  END IF
 	  
-!~ 		IF (is_print_elem .AND. is_print_inc .AND. is_print_ip) THEN
-!~ 		   WRITE(6,*), "---------------------------------------"
-!~ 		   WRITE(6,*) 'Ct analytisch:'
-!~ 		   WRITE(6,*) ''
+		IF (is_print_elem .AND. is_print_inc .AND. is_print_ip) THEN
+		   WRITE(6,*), "---------------------------------------"
+		   WRITE(6,*) 'Ct analytisch:'
+		   WRITE(6,*) ''
 		   
-!~ 		   ! Ausgabe des 4x4 Blocks
-!~ 		   WRITE(6,*) 'Block 1:4, 1:4:'
-!~ 		   DO i1 = 1, 4
-!~ 			  DO i2 = 1, 4
-!~ 				 WRITE(6,'(A,I1,A,I1,A,F16.8)') 'Ct(', i1, ',', i2, ') = ', Ct(i1,i2)
-!~ 			  END DO
-!~ 		   END DO
-!~ 		   WRITE(6,*) ''
-!~ 		   WRITE(6,*) '---------------------------------------'
-!~ 		   WRITE(6,*) 'phase Ct analytisch: '
-!~ 		   WRITE(6,'(F16.10)') Ct(pos_p(1),pos_p(1))
-!~ 		   WRITE(6,*) 'gradphase Ct: '
-!~ 		   WRITE(6,'(F16.10)') Ct(pos_p(1)+1:ntens,pos_p(1)+1:ntens)
-!~ 		   WRITE(6,*) '----------------------------------------'
-!~ 		   WRITE(6,*) ''
-!~ 		   ! 
+		   ! Ausgabe des 4x4 Blocks
+		   WRITE(6,*) 'Block 1:4, 1:4:'
+		   DO i1 = 1, 4
+			  DO i2 = 1, 4
+				 WRITE(6,'(A,I1,A,I1,A,F16.8)') 'Ct(', i1, ',', i2, ') = ', Ct(i1,i2)
+			  END DO
+		   END DO
+		   WRITE(6,*) ''
+		   WRITE(6,*) '---------------------------------------'
+		   WRITE(6,*) 'phase Ct analytisch: '
+		   WRITE(6,'(F16.10)') Ct(pos_p(1),pos_p(1))
+		   WRITE(6,*) 'gradphase Ct: '
+		   WRITE(6,'(F16.10)') Ct(pos_p(1)+1:ntens,pos_p(1)+1:ntens)
+		   WRITE(6,*) '----------------------------------------'
+		   WRITE(6,*) ''
+!~ 		   ! Ausgabe des 3x3 Blocks (falls ntens >= 7)
 !~ 		   IF (ntens >= 7) THEN
 !~ 			  WRITE(6,*) 'Block 5:7, 5:7:'
 !~ 			  DO i1 = 5, 7
@@ -637,7 +675,7 @@ MODULE PhaseField_module
 !~ 			  END DO
 !~ 			  WRITE(6,*) ''
 !~ 		   END IF
-!~ 		END IF
+		END IF
 	  
 	  !!!!!!!!!!!!
 	  !
@@ -649,7 +687,7 @@ MODULE PhaseField_module
 	    CALL Check_Stress_Comparison(stress, stran, D, ntens, isSpherisymmetric, &
                                 nphase, pos_p, phase_old, dtime, &
                                 nHFEDpar, nCSEDpar, nVDEDpar, parHFEDMatrix, &
-                                parCSEDMatrix, parVDEDMatrix, H, isMonolithic, isBFGS, isStaggered, isCouplingterms)
+                                parCSEDMatrix, parVDEDMatrix, H_sph, H_dev, isMonolithic, isBFGS, isStaggered, isCouplingterms)
 	  END IF
 	  !!!!!!!!!!!!
 	  !
@@ -660,7 +698,7 @@ MODULE PhaseField_module
 		CALL Check_Tangent_Comparison(Ct, stress, stran, D, ntens, isSpherisymmetric, &
 								   nphase, pos_p, prop_solver, phase_old, dtime, &
 								   nHFEDpar, nCSEDpar, nVDEDpar, parHFEDMatrix, &
-								   parCSEDMatrix, parVDEDMatrix, H, isMonolithic, isBFGS, isStaggered, isCouplingterms)
+								   parCSEDMatrix, parVDEDMatrix, H_sph, H_dev, isMonolithic, isBFGS, isStaggered, isCouplingterms)
 	  END IF
 	  !!!!!!!!!
 
@@ -904,7 +942,7 @@ MODULE PhaseField_module
 
 !------------------------------------------------------------------------------------
 
-      REAL(kind=AbqRK) FUNCTION stresses(D,ntens,nphase,pos_p, prop_solver,eps,eps_old,phase,phase_old,dtime,grad_phase,nHFEDpar,nCSEDpar,nVDEDpar,parHFEDMatrix,parCSEDMatrix,parVDEDMatrix,H,isMonolithic, isBFGS, isStaggered, isCouplingterms)
+      REAL(kind=AbqRK) FUNCTION stresses(D,ntens,nphase,pos_p, prop_solver,eps,eps_old,phase,phase_old,dtime,grad_phase,nHFEDpar,nCSEDpar,nVDEDpar,parHFEDMatrix,parCSEDMatrix,parVDEDMatrix,H_sph,H_dev,isMonolithic, isBFGS, isStaggered, isCouplingterms)
       ! generalised stresses, modified Voigt notation
 
         USE ABQINTERFACE_PF
@@ -921,7 +959,7 @@ MODULE PhaseField_module
         INTEGER(kind=AbqIK), INTENT(IN) :: nHFEDpar
         INTEGER(kind=AbqIK), INTENT(IN) :: nCSEDpar
         INTEGER(kind=AbqIK), INTENT(IN) :: nVDEDpar
-        REAL(kind=AbqRK), INTENT(IN) :: eps(3,3), eps_old(3,3), phase(nphase), phase_old(nphase), grad_phase(nphase,3), dtime, H
+        REAL(kind=AbqRK), INTENT(IN) :: eps(3,3), eps_old(3,3), phase(nphase), phase_old(nphase), grad_phase(nphase,3), dtime, H_sph, H_dev
         REAL(kind=AbqRK), INTENT(IN) :: parHFEDMatrix(nHFEDpar) 
         REAL(kind=AbqRK), INTENT(IN) :: parCSEDMatrix(nCSEDpar) 
         REAL(kind=AbqRK), INTENT(IN) :: parVDEDMatrix(nVDEDpar)
@@ -975,14 +1013,14 @@ MODULE PhaseField_module
           ! phase: contributions of bulk energy + crack surface energy
           IF (isMonolithic) THEN
             !monolithic, staggered is the same, due to H defined earlier, eps in d_bulkED_d_phase_H is not used in the function
-            stresses(pos_i1) = d_bulkED_d_phase_H(eps,phase(1),nHFEDpar,parHFEDMatrix,H) + d_CSED_d_phase(phase(1),grad_phase(1,:),nCSEDpar,parCSEDMatrix) +                   d_VDED_d_phase(phase(1),phase_old(1),dtime,nCSEDpar,parCSEDMatrix,nVDEDpar,parVDEDMatrix)
+            stresses(pos_i1) = d_bulkED_d_phase_H(eps,phase(1),nHFEDpar,parHFEDMatrix,H_sph,H_dev) + d_CSED_d_phase(phase(1),grad_phase(1,:),nCSEDpar,parCSEDMatrix) +                   d_VDED_d_phase(phase(1),phase_old(1),dtime,nCSEDpar,parCSEDMatrix,nVDEDpar,parVDEDMatrix)
           ELSE IF (isBFGS) THEN
             !BFGS
-            stresses(pos_i1) = d_bulkED_d_phase_H(eps,phase(1),nHFEDpar,parHFEDMatrix,H) + d_CSED_d_phase(phase(1),grad_phase(1,:),nCSEDpar,parCSEDMatrix) +                   d_VDED_d_phase(phase(1),phase_old(1),dtime,nCSEDpar,parCSEDMatrix,nVDEDpar,parVDEDMatrix)
+            stresses(pos_i1) = d_bulkED_d_phase_H(eps,phase(1),nHFEDpar,parHFEDMatrix,H_sph,H_dev) + d_CSED_d_phase(phase(1),grad_phase(1,:),nCSEDpar,parCSEDMatrix) +                   d_VDED_d_phase(phase(1),phase_old(1),dtime,nCSEDpar,parCSEDMatrix,nVDEDpar,parVDEDMatrix)
           ELSE IF (isStaggered) THEN
             !staggered Martinez-Paneda
-            stresses(pos_i1) = d_bulkED_d_phase_H(eps_old,phase(1),nHFEDpar,parHFEDMatrix,H) + d_CSED_d_phase(phase(1),grad_phase(1,:),nCSEDpar,parCSEDMatrix) +                   d_VDED_d_phase(phase(1),phase_old(1),dtime,nCSEDpar,parCSEDMatrix,nVDEDpar,parVDEDMatrix)
-	  END IF
+            stresses(pos_i1) = d_bulkED_d_phase_H(eps_old,phase(1),nHFEDpar,parHFEDMatrix,H_sph,H_dev) + d_CSED_d_phase(phase(1),grad_phase(1,:),nCSEDpar,parCSEDMatrix) +                   d_VDED_d_phase(phase(1),phase_old(1),dtime,nCSEDpar,parCSEDMatrix,nVDEDpar,parVDEDMatrix)
+		  END IF
           
           !
           ! grad_phase: contributions of crack surface energy
@@ -994,7 +1032,7 @@ MODULE PhaseField_module
 
 !------------------------------------------------------------------------------------
 
-      REAL(kind=AbqRK) FUNCTION tangent(D,ntens,nphase,pos_p,prop_solver,eps,eps_old,phase,phase_old,dtime,grad_phase,nHFEDpar,nCSEDpar,nVDEDpar,parHFEDMatrix,parCSEDMatrix,parVDEDMatrix,H,isMonolithic, isBFGS, isStaggered, isCouplingterms)
+      REAL(kind=AbqRK) FUNCTION tangent(D,ntens,nphase,pos_p,prop_solver,eps,eps_old,phase,phase_old,dtime,grad_phase,nHFEDpar,nCSEDpar,nVDEDpar,parHFEDMatrix,parCSEDMatrix,parVDEDMatrix,H_sph,H_dev,isMonolithic, isBFGS, isStaggered, isCouplingterms)
       ! generalised tangent, modified Voigt notation
 
         USE ABQINTERFACE_PF
@@ -1008,7 +1046,7 @@ MODULE PhaseField_module
         IMPLICIT NONE
         INTEGER(kind=AbqIK), INTENT(IN) :: D, ntens, nphase, pos_p(nphase), prop_solver
         INTEGER(kind=AbqIK), INTENT(IN) :: nHFEDpar, nCSEDpar, nVDEDpar
-        REAL(kind=AbqRK), INTENT(IN) :: eps(3,3),eps_old(3,3), phase(nphase), phase_old(nphase), grad_phase(nphase,3), dtime, H
+        REAL(kind=AbqRK), INTENT(IN) :: eps(3,3),eps_old(3,3), phase(nphase), phase_old(nphase), grad_phase(nphase,3), dtime, H_sph, H_dev
         REAL(kind=AbqRK), INTENT(IN) :: parHFEDMatrix(nHFEDpar) 
         REAL(kind=AbqRK), INTENT(IN) :: parCSEDMatrix(nCSEDpar) 
         REAL(kind=AbqRK), INTENT(IN) :: parVDEDMatrix(nVDEDpar) 
@@ -1188,13 +1226,13 @@ MODULE PhaseField_module
             
             IF (isMonolithic) THEN
               !monolithisch
-              d_d_bulkED_CSED_VDED_d_phase_d_phase = d_d_bulkED_d_phase_d_phase_H(eps,phase(1),nHFEDpar,parHFEDMatrix,H) + d_d_CSED_d_phase_d_phase(phase(1),                  grad_phase(1,:),nCSEDpar,parCSEDMatrix) + d_d_VDED_d_phase_d_phase(phase(1),phase_old(1),dtime,nCSEDpar,parCSEDMatrix,nVDEDpar,parVDEDMatrix)
+              d_d_bulkED_CSED_VDED_d_phase_d_phase = d_d_bulkED_d_phase_d_phase_H(eps,phase(1),nHFEDpar,parHFEDMatrix,H_sph,H_dev) + d_d_CSED_d_phase_d_phase(phase(1),                  grad_phase(1,:),nCSEDpar,parCSEDMatrix) + d_d_VDED_d_phase_d_phase(phase(1),phase_old(1),dtime,nCSEDpar,parCSEDMatrix,nVDEDpar,parVDEDMatrix)
             ELSEIF (isBFGS) THEN
               !BFGS
-              d_d_bulkED_CSED_VDED_d_phase_d_phase = d_d_bulkED_d_phase_d_phase_H(eps,phase(1),nHFEDpar,parHFEDMatrix,H) + d_d_CSED_d_phase_d_phase(phase(1),                  grad_phase(1,:),nCSEDpar,parCSEDMatrix) + d_d_VDED_d_phase_d_phase(phase(1),phase_old(1),dtime,nCSEDpar,parCSEDMatrix,nVDEDpar,parVDEDMatrix)
+              d_d_bulkED_CSED_VDED_d_phase_d_phase = d_d_bulkED_d_phase_d_phase_H(eps,phase(1),nHFEDpar,parHFEDMatrix,H_sph,H_dev) + d_d_CSED_d_phase_d_phase(phase(1),                  grad_phase(1,:),nCSEDpar,parCSEDMatrix) + d_d_VDED_d_phase_d_phase(phase(1),phase_old(1),dtime,nCSEDpar,parCSEDMatrix,nVDEDpar,parVDEDMatrix)
             ELSEIF (isStaggered) THEN
               !staggered Martinez-Paneda
-              d_d_bulkED_CSED_VDED_d_phase_d_phase = d_d_bulkED_d_phase_d_phase_H(eps_old,phase(1),nHFEDpar,parHFEDMatrix,H) + d_d_CSED_d_phase_d_phase(phase(1),                  grad_phase(1,:),nCSEDpar,parCSEDMatrix) + d_d_VDED_d_phase_d_phase(phase(1),phase_old(1),dtime,nCSEDpar,parCSEDMatrix,nVDEDpar,parVDEDMatrix)
+              d_d_bulkED_CSED_VDED_d_phase_d_phase = d_d_bulkED_d_phase_d_phase_H(eps_old,phase(1),nHFEDpar,parHFEDMatrix,H_sph,H_dev) + d_d_CSED_d_phase_d_phase(phase(1),                  grad_phase(1,:),nCSEDpar,parCSEDMatrix) + d_d_VDED_d_phase_d_phase(phase(1),phase_old(1),dtime,nCSEDpar,parCSEDMatrix,nVDEDpar,parVDEDMatrix)
             ENDIF
             
             tangent(pos_i1,pos_i2) = d_d_bulkED_CSED_VDED_d_phase_d_phase
@@ -1235,7 +1273,7 @@ MODULE PhaseField_module
 SUBROUTINE Check_Stress_Comparison(stress, stran, D, ntens, isSpherisymmetric, &
                                     nphase, pos_p, phase_old, dtime, &
                                     nHFEDpar, nCSEDpar, nVDEDpar, parHFEDMatrix, &
-                                    parCSEDMatrix, parVDEDMatrix, H, isMonolithic, isBFGS, isStaggered, isCouplingterms)
+                                    parCSEDMatrix, parVDEDMatrix,  H_sph, H_dev, isMonolithic, isBFGS, isStaggered, isCouplingterms)
   !
   ! Subroutine to check analytical stress against numerical stress
   ! Numerical stress is computed as derivative of total potential
@@ -1256,7 +1294,7 @@ SUBROUTINE Check_Stress_Comparison(stress, stran, D, ntens, isSpherisymmetric, &
   REAL(kind=AbqRK), INTENT(IN) :: parHFEDMatrix(nHFEDpar)
   REAL(kind=AbqRK), INTENT(IN) :: parCSEDMatrix(nCSEDpar)
   REAL(kind=AbqRK), INTENT(IN) :: parVDEDMatrix(nVDEDpar)
-  REAL(kind=AbqRK), INTENT(IN) :: H
+  REAL(kind=AbqRK), INTENT(IN) :: H_sph, H_dev
   LOGICAL, INTENT(IN) :: isMonolithic, isBFGS, isStaggered, isCouplingterms
   
   ! Local variables
@@ -1396,7 +1434,7 @@ END SUBROUTINE Check_Stress_Comparison
 SUBROUTINE Check_Tangent_Comparison(Ct, stress, stran, D, ntens, isSpherisymmetric, &
                                      nphase, pos_p, prop_solver, phase_old, dtime, &
                                      nHFEDpar, nCSEDpar, nVDEDpar, parHFEDMatrix, &
-                                     parCSEDMatrix, parVDEDMatrix, H, isMonolithic, isBFGS, isStaggered, isCouplingterms)
+                                     parCSEDMatrix, parVDEDMatrix, H_sph, H_dev, isMonolithic, isBFGS, isStaggered, isCouplingterms)
   !
   ! Subroutine to check analytical tangent against numerical tangent
   !
@@ -1418,7 +1456,7 @@ SUBROUTINE Check_Tangent_Comparison(Ct, stress, stran, D, ntens, isSpherisymmetr
   REAL(kind=AbqRK), INTENT(IN) :: parHFEDMatrix(nHFEDpar)
   REAL(kind=AbqRK), INTENT(IN) :: parCSEDMatrix(nCSEDpar)
   REAL(kind=AbqRK), INTENT(IN) :: parVDEDMatrix(nVDEDpar)
-  REAL(kind=AbqRK), INTENT(IN) :: H
+  REAL(kind=AbqRK), INTENT(IN) :: H_sph, H_dev
   LOGICAL, INTENT(IN) :: isMonolithic, isBFGS, isStaggered, isCouplingterms
   
   ! Local variables
@@ -1474,7 +1512,7 @@ SUBROUTINE Check_Tangent_Comparison(Ct, stress, stran, D, ntens, isSpherisymmetr
   
 	phase = phaseParameter(nphase,pos_p,ntens,stran_per)
 	grad_phase(:,:) = gradientOfPhaseParameter(nphase,D,pos_p,ntens,stran_per)
-	stress_per = stresses(D,ntens,nphase,pos_p,prop_solver,eps_per, eps_old, phase,phase_old,dtime,grad_phase,nHFEDpar,nCSEDpar,nVDEDpar,parHFEDMatrix,parCSEDMatrix,parVDEDMatrix,H,isMonolithic, isBFGS, isStaggered, isCouplingterms)
+	stress_per = stresses(D,ntens,nphase,pos_p,prop_solver,eps_per, eps_old, phase,phase_old,dtime,grad_phase,nHFEDpar,nCSEDpar,nVDEDpar,parHFEDMatrix,parCSEDMatrix,parVDEDMatrix,H_sph,H_dev,isMonolithic, isBFGS, isStaggered, isCouplingterms)
 	Ct_temp2(i1,1:ntens) = (stress_per(1:ntens)-stress(1:ntens))/delta
   END DO
   !
