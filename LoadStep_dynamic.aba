@@ -1,0 +1,51 @@
+** 
+** STEP: Step-1
+** 
+*Step, name=<stepName_Dynamic>, extrapolation=NO, inc=<numInc>
+*Dynamic
+<dt_Dynamic_Init>,<time_Dynamic_total>,<dt_Dynamic_min>
+**
+*Amplitude, name=Amp
+             0.,              0.,              1.,              1.,              2.,              1.,              3.,              1.
+             4.,              0.
+** 
+** 
+** BOUNDARY CONDITIONS
+** 
+** Name: BC_V Type: Velocity/Angular velocity
+*Boundary, amplitude=Amp, type=VELOCITY
+top, <dof_uy>, <dof_uy>, <Velocity_BC>
+**bottom, <dof_uy>, <dof_uy>, <Velocity_BC>
+bottom, <dof_uy>, <dof_uy>, 0.
+bottomleft, <dof_ux>, <dof_ux>, 0.
+** 
+** CONTROLS
+**
+*Controls, reset
+*Controls, parameters=time incrementation
+, , , , , , , 10, , , 
+*Controls, parameters=field, field=displacement
+0.000001, , , , , , , 
+**
+** OUTPUT REQUESTS
+**
+*Restart, write, frequency=0, overlay
+**
+*Output, field, time interval=0.01
+*Node Output
+U, V, EPOT, RF
+** 
+*Output, history, time interval=0.01
+*Energy Output
+ALLKE, ALLSE, ALLCD, ALLPD, ALLVD, ALLAE, ALLEE
+**
+*FILE FORMAT, ZERO INCREMENT
+*EL FILE, FREQUENCY=<outputFilFrequency>
+
+SDV
+*NODE FILE, FREQUENCY=<outputFilFrequency>
+U, EPOT
+*ENERGY FILE, FREQUENCY=<outputFilFrequency>
+**
+*End Step
+**

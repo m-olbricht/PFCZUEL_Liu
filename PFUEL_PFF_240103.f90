@@ -28,7 +28,9 @@
       !!!!!!!!!!
       USE BulkEnergyModule
       USE CrackSurfaceEnergyModule
-
+	  !!!!!!!!!!
+	  ! 
+	  USE KineticEnergyModule ! only for displaying the energy, no impact on the UMAT
 
       IMPLICIT NONE
       
@@ -54,11 +56,17 @@
       CHARACTER*45 :: cmname
 
       ! further variables
-      REAL(kind=AbqRK) :: fint(ndofel), energy_gp(8), JacobiDet, prop_thickness, prop_debug, p, lambda
+      REAL(kind=AbqRK) :: fint(ndofel), energy_gp(8), JacobiDet, prop_thickness, prop_debug
       REAL(kind=AbqRK), ALLOCATABLE :: Matrix_B(:,:), stran(:), dstran(:), Ct(:,:), stress(:)
       INTEGER(kind=AbqIK) :: i1, i2, i3
       INTEGER(kind=AbqIK) :: nNodalDOF, nPp
       LOGICAL :: isNlgeom, positivDetJ, k_RHS, k_K, k_M, positivDetJTemp, is_print_inc, is_print_elem, debug_Flag
+      
+      ! Dynamic STEPS
+      LOGICAL :: isDynamic
+      REAL(kind=AbqRK) :: kinED_gp
+      REAL(kind=AbqRK) :: prop_dynamic, prop_density
+      REAL(kind=AbqRK), ALLOCATABLE :: MassM(:,:), Matrix_N(:,:), vel_gp(:) ! DYNAMIC STEPS
       
       ! pure debug Variables
       INTEGER(kind=AbqIK), PARAMETER :: n_debug_elem = 1
@@ -69,7 +77,7 @@
       INTEGER(kind=AbqIK) :: debug_increments(n_debug_inc)
       INTEGER(kind=AbqIK) :: debug_ipoints(n_debug_ip)
       
-      DATA debug_elements /552/
+      DATA debug_elements /1/
       DATA debug_increments /1,2,3,4,5,500,501,502,503,504/
       DATA debug_ipoints /1/
 
@@ -104,7 +112,33 @@
       ! evaluation of lflags
       ! geometric nonlinear
       IF (lflags(2) .EQ. 1) isNlgeom = .TRUE.
-
+      
+      ! props:
+      ! 
+      ! 0.
+      ! nCpFloat
+      ! 0.
+      ! Flag numerical Tangent (1 - yes, 0 - analytical)
+      ! E-Modulus
+      ! poissons ratio
+      ! gamma star (star convex split, de Lorenzis)
+      ! l0 (internal length)
+      ! Gc (fracture toughness)
+      ! Flag Solver (1 - monolithic, 2 - BFGS, 3 - staggered)
+      ! Flag Coupling terms (1 - use coupling terms, 2 - no coupling terms)
+      ! thickness (plain strain)
+      ! Flag print (1 - print, 2 - no print)
+      ! Flag check stress
+      ! Flag check tangent
+      ! viscous parameter Phase-Field (eta, viscous regularization, Miehe)
+      ! 0.
+      ! 0.
+      ! Flag dynamic step (1 - dynamic step, 0 - no dynamic terms)
+      ! density (for dynamic steps)
+      !
+      
+      
+      ! jprops
 	  !
 	  ! jprop1 = reduced Integration
 	  ! integration: 1 - reduced, 0 - full (default), 2 - full (2nd integration scheme)
@@ -148,8 +182,24 @@
         write(7,*) 'no output required'
       END SELECT
       
+      ! DYNAMIC Parameters
+      prop_dynamic = props(19)
+      prop_density = props(20)
+      
+      IF (prop_dynamic .GT. zero) THEN
+		isDynamic = .TRUE.
+	  END IF
+      
+      
+      ! Important to Make sure the Calculation of the Matrix_N is also conducted for Steps with k_M
+      ! (see in Materialroutine: CALL SORT_SHAPEFUNC(...))
+      IF (k_M .AND. .NOT. isDynamic) THEN
+		WRITE(7,*) 'Tried to compute Mass Matrix but isDynamic is WRONG (Inputfile))'
+		CALL XEXIT()
+	  END IF
+      
       ! number of nodal DOF
-      !nNodalDOF = ndofel/nnode
+      nNodalDOF = ndofel/nnode
       nPp       = 1 ! number of order parameters, here: damage variable 
 
       ! number of tensor coordinates (generalised): strain, damage variable
@@ -158,7 +208,16 @@
       ! allocation of UMAT-matrices
       ALLOCATE(ddsddt(ntens), drplde(ntens), Matrix_B(ntens,ndofel), Ct(ntens,ntens), stran(ntens), dstran(ntens), stress(ntens))
       ddsddt=zero; drplde=zero; Matrix_B = zero; stran = zero; dstran = zero; Ct = zero; stress = zero
-
+      
+      ! ALLOCATION DYNAMIC STEP VARIABLES
+      ALLOCATE(MassM(ndofel, ndofel))
+      
+	  ALLOCATE(Matrix_N(nNodalDOF, ndofel))
+	  ALLOCATE(vel_gp(D))
+	  vel_gp = zero
+	  MassM = zero
+	  Matrix_N = zero
+      
       ! query at time 0: number of internal state variables per integration point and material parameters: answer from UMAT
       IF ( time(2) .EQ. zero ) THEN
         IF (nsvars .LT. NGP*numSDV) THEN
@@ -213,8 +272,7 @@
 			   ENDIF
 			  END DO
 		  END IF
-        
-        
+		  
         DO npt=1,NGP
           ! compute JACOBI determinante and B-matrix
           CALL BMatrixJacobian(coords(1:D,1:nnode),u,D,nnode,ndofel,NDI,NSHR,ntens,njprop,ShapeFunc(GPPos(npt,1:D)), &
@@ -230,21 +288,39 @@
             stress = zero
             !stress = svars(2:1+ndi+nshr)
             energy_gp = zero
+            vel_gp = zero
             !=======================================================
             ! evaluation constitutive law
-
-            
+			!
+            !
             CALL umat(stress,svars(numSDV*(npt-1)+1:numSDV*npt),Ct,energy_gp(2), &
                       energy_gp(4),energy_gp(3),rpl,ddsddt,drplde,drpldt,stran, &
                       dstran,time,dtime,predef_umat(1),dpred(1),predef_umat,dpred,cmname,NDI,NSHR,ntens, &
                       numSDV,props,nprops,GPcoords,drot,pnewdt,celent,F0,F1,jelem,npt,layer,kspt,kstep,kinc)
-
-
+			!
+			! kinetic Energy, Velocity at GP
+			!
+			IF (isDynamic) THEN
+				CALL SORT_SHAPEFUNC(Matrix_N, ShapeFunc(GPPos(npt,1:D)), nnode, nPp, D) ! Sicherstellen dass für k_M auch isDynamic sicher aktiviert ist!
+				vel_gp = MATMUL(Matrix_N,v)
+				kinED_gp = kinED(prop_density, vel_gp, D)
+			END IF
+			!
+			!
+			IF (k_M) THEN
+		    ! mass matrix
+		    ! Matrix_N is the Shapefunction-Matrix (explained in SORT_SHAPEFUNC) with evaluated N(npt) at GP npt
+			  MassM = MassM + prop_density * GPWeight(npt)*JacobiDet * matmul(transpose(Matrix_N),Matrix_N)
+!~ 			  MassM_debug = MassM_debug + prop_density * GPWeight(npt)*JacobiDet
+			END IF
+			! 
+			! Energy Densities
+			!
             energy_gp(1) = svars(numSDV*(npt-1)+17) ! (SDV 17) -> crack bulk Energy
             energy_gp(2) = svars(numSDV*(npt-1)+16) ! (SDV 16) -> stored bulk Energy
             energy_gp(3) = svars(numSDV*(npt-1)+17) ! (SDV 17) -> crack bulk Energy
             energy_gp(4) = svars(numSDV*(npt-1)+18) ! (SDV 18) -> viscous dissipation Energy
-            energy_gp(5) = 0. !
+            energy_gp(5) = kinED_gp ! -> kinetic Energy
             energy_gp(6) = svars(numSDV*(npt-1)+19) ! (SDV 19) -> total Energy Bulk
             energy_gp(7) = 0. ! 
 
@@ -255,7 +331,7 @@
             ! 2 = ALLSE -> PFFCZ kombinierte linear elast. stored Energy (gesamt elast. gesp. Energie)
             ! 3 = ALLCD -> PFFCZ kombinierte gesp. Bruchenergie (gesamt Bruchenergie)
             ! 4 = ALLPD -> Kontaktenergie CZ bei negativer Normalseparation + viskose Regularisierung aus PFF (keine physikalische Interpretation. Nur um zu checken ob Energieterme auftreten)
-            ! 5 = ALLVD -> Strafenergie für Damage Jump 
+            ! 5 = ALLVD -> kinetische Energie PF
             ! 6 = ALLAE -> totale Energie CZ + totale Energie PFF (gesamte Energie im System)
             ! 7 = ALLEE -> reine Bruchenergie aus CZ Bereich (s. CZUEL.f90)
 
@@ -264,9 +340,10 @@
             energy(:) = energy(:) + GPWeight(npt)*JacobiDet * energy_gp(:)
             ! stiffness matrix
             amatrx = amatrx + GPWeight(npt)*JacobiDet * matmul(transpose(Matrix_B),matmul(Ct,Matrix_B))
+            
             ! internal force vector
             fint = fint - GPWeight(npt)*JacobiDet * matmul(transpose(Matrix_B),stress)
-				
+			
           ELSE
           ! distorted element
             ! stop loop
@@ -276,40 +353,40 @@
 
 
 
-	   IF (is_print_elem .AND. is_print_inc .AND. npt .EQ. NGP) THEN
-	   !
-			WRITE(6,*) ' === FINALE ELEMENT-MATRIZEN ==='
-			WRITE(6,*) ' Steifigkeitsmatrix amatrx (mechanisch/elastisch):'
+!~ 	   IF (is_print_elem .AND. is_print_inc .AND. npt .EQ. NGP) THEN
+!~ 	   !
+!~ 			WRITE(6,*) ' === FINALE ELEMENT-MATRIZEN ==='
+!~ 			WRITE(6,*) ' Steifigkeitsmatrix amatrx (mechanisch/elastisch):'
 
-			DO i1 = 1, 8
-			   WRITE(6,'(A,I2,A,8(ES12.4,1X))') '  Zeile', i1, ':', &
-				  (amatrx(row_u(i1), col_u(i2)), i2=1,8)
-			END DO
+!~ 			DO i1 = 1, 8
+!~ 			   WRITE(6,'(A,I2,A,8(ES12.4,1X))') '  Zeile', i1, ':', &
+!~ 				  (amatrx(row_u(i1), col_u(i2)), i2=1,8)
+!~ 			END DO
 
-			WRITE(6,*) ''
-			WRITE(6,*) ' Steifigkeitsmatrix amatrx (Phase field):'
+!~ 			WRITE(6,*) ''
+!~ 			WRITE(6,*) ' Steifigkeitsmatrix amatrx (Phase field):'
 
-			DO i1 = 1, 4
-			   WRITE(6,'(A,I2,A,4(ES12.4,1X))') '  Zeile', i1+8, ':', &
-				  (amatrx(row_phi(i1), col_phi(i2)), i2=1,4)
-			END DO
+!~ 			DO i1 = 1, 4
+!~ 			   WRITE(6,'(A,I2,A,4(ES12.4,1X))') '  Zeile', i1+8, ':', &
+!~ 				  (amatrx(row_phi(i1), col_phi(i2)), i2=1,4)
+!~ 			END DO
 
-			WRITE(6,*) ''
-		  WRITE(6,*) ' Residuum rhs (mechanisch/elastisch):'
-		  ! rhs 1, 2, 4, 5, 7, 8, 10, 11
-		  DO i1 = 1, 11, 3
-			 WRITE(6,'(A,I2,A,ES12.4)') '  rhs(', i1, ') =', fint(i1)
-			 WRITE(6,'(A,I2,A,ES12.4)') '  rhs(', i1+1, ') =', fint(i1+1)
-		  END DO
-		  WRITE(6,*) ''
-		  WRITE(6,*) ' Residuum rhs (Phase field):'
-		  ! rhs 3, 6, 9, 12
-		  DO i1 = 3, 12, 3
-			 WRITE(6,'(A,I2,A,ES12.4)') '  rhs(', i1, ') =', fint(i1)
-		  END DO
-		  WRITE(6,*) ''
-		  WRITE(6,*) '-----------------------------------------------'
-	   END IF
+!~ 			WRITE(6,*) ''
+!~ 		  WRITE(6,*) ' Residuum rhs (mechanisch/elastisch):'
+!~ 		  ! rhs 1, 2, 4, 5, 7, 8, 10, 11
+!~ 		  DO i1 = 1, 11, 3
+!~ 			 WRITE(6,'(A,I2,A,ES12.4)') '  rhs(', i1, ') =', fint(i1)
+!~ 			 WRITE(6,'(A,I2,A,ES12.4)') '  rhs(', i1+1, ') =', fint(i1+1)
+!~ 		  END DO
+!~ 		  WRITE(6,*) ''
+!~ 		  WRITE(6,*) ' Residuum rhs (Phase field):'
+!~ 		  ! rhs 3, 6, 9, 12
+!~ 		  DO i1 = 3, 12, 3
+!~ 			 WRITE(6,'(A,I2,A,ES12.4)') '  rhs(', i1, ') =', fint(i1)
+!~ 		  END DO
+!~ 		  WRITE(6,*) ''
+!~ 		  WRITE(6,*) '-----------------------------------------------'
+!~ 	   END IF
 
 
 
@@ -326,7 +403,7 @@
 
       IF (k_M) THEN
       ! mass matrix
-        amatrx = zero
+        amatrx = MassM
       ELSE IF (.NOT. k_K) THEN
       ! no matrix required
         amatrx = zero
@@ -339,7 +416,9 @@
       
 
       DEALLOCATE(Matrix_B, ddsddt, drplde, stran, dstran, Ct, stress)
+      DEALLOCATE(MassM, Matrix_N, vel_gp) ! DYNAMIC STEPS
 
+      
       RETURN
 
 !      CONTAINS
@@ -349,6 +428,58 @@
     END SUBROUTINE UEL
 
 !------------------------------------------------------------------------------------
+SUBROUTINE SORT_SHAPEFUNC(N_sorted, A, nnode, nPp, D)
+
+! ======================================================================
+!     SORT_SHAPEFUNC - Create Matrix with Shapefunctions evaluated at npt (a single GP)
+! ======================================================================
+!     Creates Shape Function Matrix with 
+!     Input:
+!       A(nnode)   - Array with Values Shape_Function N_Matrix = [N1, N2, ..., Nnnode]
+!       nnode      - number of Shapefunctions (Number of Nodes)
+!       nPp        - Add. DOF per Node (phasen)
+!       D          - mech. DOF per Node
+!     Output:
+!       N_Matrix(DOF, DOF*nnode) - sorted N-Matrix (DOF = D+nPp)
+!     Example 	 D=2, nPp=1, nnode = 4:
+!     N_Matrix = [ N1  0  0  N2  0  0  N3  0  0  N4  0  0 ]
+!         		 [  0 N1  0   0 N2  0   0 N3  0   0 N4  0 ]
+!         		 [  0  0  0   0  0  0   0  0  0   0  0  0 ]
+!     Example 	 D=3, nPp=0, nnode = 4:
+!     N_Matrix = [ N1  0  0  N2  0  0  N3  0  0  N4  0  0 ]
+!         		 [  0 N1  0   0 N2  0   0 N3  0   0 N4  0 ]
+!         		 [  0  0 N1   0  0 N2   0  0 N3   0  0 N4 ]
+! ======================================================================
+
+  IMPLICIT NONE
+  INTEGER(kind=AbqIK), INTENT(IN) :: nnode, nPp, D
+  
+  REAL(kind=AbqRK), INTENT(IN) :: A(nnode)
+  INTEGER(kind=AbqIK) :: DOF
+  REAL(kind=AbqRK), INTENT(OUT) :: N_sorted(D+nPp, (D+nPp)*nnode)
+  
+  INTEGER :: i1, i2, idx_node, row_idx, col_offset
+  
+  ! DOF per node
+  DOF = D + nPp
+  
+  ! Init
+  DO i1 = 1, DOF
+    DO i2 = 1, DOF*nnode
+      N_sorted(i1, i2) = zero
+    END DO
+  END DO
+  
+  ! Values insert
+  DO idx_node = 1, nnode
+    DO row_idx = 1, D
+      col_offset = (idx_node - 1) * DOF + row_idx
+      N_sorted(row_idx, col_offset) = A(idx_node)
+    END DO
+  END DO
+  
+  RETURN
+END SUBROUTINE SORT_SHAPEFUNC
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 

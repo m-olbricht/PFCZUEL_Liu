@@ -156,7 +156,7 @@
             energy_gp(2) = svars(numSDV*(npt-1)+6) ! (SDV 6) -> stored CZ Energy
             energy_gp(3) = svars(numSDV*(npt-1)+7) ! (SDV 7) -> crack CZ Energy
             energy_gp(4) = svars(numSDV*(npt-1)+8) ! (SDV 8) -> contact Energy
-            energy_gp(5) = svars(numSDV*(npt-1)+9) ! (SDV 9) -> penalty Energy (Damage jump)
+            energy_gp(5) = 0. !svars(numSDV*(npt-1)+9) ! (SDV 9) -> penalty Energy (Damage jump)
             energy_gp(6) = svars(numSDV*(npt-1)+5) ! (SDV 5) -> total Energy CZ
             energy_gp(7) = svars(numSDV*(npt-1)+7) ! (SDV 7) -> crack CZ Energy
 
@@ -167,7 +167,7 @@
             ! 2 = ALLSE -> PFFCZ kombinierte linear elast. stored Energy (gesamt elast. gesp. Energie)
             ! 3 = ALLCD -> PFFCZ kombinierte gesp. Bruchenergie (gesamt Bruchenergie)
             ! 4 = ALLPD -> Kontaktenergie CZ bei negativer Normalseparation + viskose Regularisierung aus PFF (keine physikalische Interpretation. Nur um zu checken ob Energieterme auftreten)
-            ! 5 = ALLVD -> Strafenergie für Damage Jump 
+            ! 5 = ALLVD -> kinetische Energie PF
             ! 6 = ALLAE -> totale Energie CZ + totale Energie PFF (gesamte Energie im System)
             ! 7 = ALLEE -> reine Bruchenergie aus CZ Bereich (s. CZUEL.f90)
             !

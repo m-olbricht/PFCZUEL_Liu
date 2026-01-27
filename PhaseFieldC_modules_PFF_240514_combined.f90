@@ -505,7 +505,7 @@ MODULE PhaseField_module
 	     WRITE(6,*) 'ElasticEnergytens: ', ElasticEnergytens_sph + ElasticEnergytens_dev
          WRITE(6,*) 'History_n_sph: ', Hn_sph
          WRITE(6,*) 'History_n_dev: ', Hn_dev
-	 WRITE(6,*) 'History_n: ', Hn_sph + Hn_dev
+		 WRITE(6,*) 'History_n: ', Hn_sph + Hn_dev
          WRITE(6,*) "----------------------------------------"
          WRITE(6,*) 'phase: ', phase
          WRITE(6,*) "----------------------------------------"

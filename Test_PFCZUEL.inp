@@ -1,0 +1,212 @@
+***************************************************************************
+**
+** ABAQUS-Inputfile: Linear-elastic UEL
+**
+** * with unused 2 scalar fields
+**
+** Stephan Roth
+**
+** TU Bergakademie Freiberg, 01.11.2023
+**
+** units: mm, N, MPa, s, K
+**
+**
+***************************************************************************
+** parameters to be defined
+***************************************************************************
+**
+*PARAMETER
+**
+** Step
+**~ stepNameInit = 'LoadstepInit'
+**~ timeInit = 1.
+**~ dtmaxInit = 0.0005
+**~ dtinitInit = 0.0005
+**~ dtminInit    = 1e-10
+
+**
+stepName_Dynamic   = 'Loadstep'
+time_Dynamic_total = 4.
+**~ dtDynamic_max  = 0.001
+dt_Dynamic_Init    = 0.001
+dt_Dynamic_min     = 1e-10
+**
+** number of increments per step
+numInc      = 100000
+**
+** number of output intervals in *.fil
+**numFilOutput = 2
+**
+** length parameter
+**l0 = 5.
+l0 = 1.0
+** cohesive thickness = l0_interface !!!
+cohesiveThickness = 1.0
+** material parameters
+E          = 200000.
+nu         = 0.3
+Gc = 0.
+visPFF     = 0.
+visCZ	   = 0.
+gammastar  = 0.
+**
+** Dynamic Steps 
+dynamic_flag = 1.
+density = 7.5e-06
+
+**
+solver = 3
+couplingterms = 0.
+**
+**
+** For Penetration term
+K0                = E/cohesiveThickness
+K0                = K0/100.
+***************************************************
+s0          = 1.
+t0          = 1.
+G0 = 0.
+***************************************************
+** Strafenergie muss mindestens in Groessenordnung der Grenzflaechenenergie sein -- dies ist noch gesondert zu untersuchen
+**penaltyfactor = 1.E6
+penaltyfactor = 0.
+compressionStiffnessFactor = 0.
+degradationPar1 = 1.
+degradationPar2 = 1.
+**
+nCpFloat = 1. # number of components
+planestrainthickness = 1. 
+**
+** numerical tangent
+numericalTangent = 0.
+**
+** load
+verticalDisplacement = 0.
+horizontalDisplacement = 0.
+Velocity_BC = 0.1
+**
+** switches
+kredInt    = 0
+kaxisymm   = 0
+kLinearity = 0
+**
+** 0 -> NOT ACTIVE
+** > 1 -> ACTIVE
+writeflag	 = 0.
+checkstress  = 0.
+checktangent = 0.
+**
+** numerical parameters
+**num_error   = 1.0E-12
+**conv_limit  = 1.0E-6
+**num_counter = 50.0
+**
+** convergence criteria for FE-analysis
+**FEConvLimit = 0.000001
+**FEDispConvLimit = 0.01
+**
+** nodal DOF
+** UEL_type = 'U1'
+numnodes   = 4
+numprop1   = 20
+numiprop1  = 6
+numSDV1    = 160
+dim        = 2
+dof_ux     = 1
+dof_uy     = 2
+dof_damage = 9
+** UEL_type = 'U11'
+numprop2   = 15
+numiprop2  = 6
+numSDV2    = 70
+**
+***************************************************************************
+** dependent parameters not be kept unchanged
+***************************************************************************
+**
+** Parameter der Properties
+** UEL_type = 'U1' -- aussen
+** Floats
+prop1_1  = 0.
+prop1_2  = nCpFloat
+prop1_3  = 0.
+prop1_4  = numericalTangent
+prop1_5  = E
+prop1_6  = nu
+prop1_7  = gammastar
+prop1_8  = l0
+prop1_9  = Gc
+prop1_10 = solver
+prop1_11 = couplingterms
+prop1_12 = planestrainthickness
+prop1_13 = writeflag
+prop1_14 = checkstress
+prop1_15 = checktangent
+prop1_16 = visPFF
+prop1_17 = 0.
+prop1_18 = 0.
+prop1_19 = dynamic_flag
+prop1_20 = density
+** Integers
+iprop1_1 = kredInt
+iprop1_2 = kaxisymm
+iprop1_3 = kLinearity
+iprop1_4 = numprop1
+iprop1_5 = dim
+iprop1_6 = 0
+**
+**
+** UEL_type = 'U11'
+** Floats
+prop2_1  = cohesiveThickness
+prop2_2  = t0
+prop2_3  = s0
+prop2_4  = numericalTangent
+prop2_5  = penaltyfactor
+prop2_6  = G0
+prop2_7  = planestrainthickness
+prop2_8  = compressionStiffnessFactor
+prop2_9  = degradationPar1
+prop2_10 = degradationPar2
+prop2_11 = visCZ
+prop2_12 = 0.
+prop2_13 = 0.
+prop2_14 = 0.
+prop2_15 = 0.
+** Integers
+iprop2_1 = kredInt
+iprop2_2 = kaxisymm
+iprop2_3 = kLinearity
+iprop2_4 = numprop2
+iprop2_5 = dim
+iprop2_6 = 0
+**
+** output request for FilFile
+outputFilFrequency = 1
+**
+***************************************************************************
+** UEL definition
+***************************************************************************
+**
+** UEL: phase-field for fracture (UEL type less than 11), dummy: elastic material
+**
+*USER ELEMENT, TYPE=U1, NODES=<numnodes>, COORDINATES=<dim>, IPROPERTIES=<numiprop1>, PROPERTIES=<numprop1>, VARIABLES=<numSDV1>
+<dof_ux>, <dof_uy>, <dof_damage>
+**
+*USER ELEMENT, TYPE=U11, NODES=<numnodes>, COORDINATES=<dim>, IPROPERTIES=<numiprop2>, PROPERTIES=<numprop2>, VARIABLES=<numSDV2>
+<dof_ux>, <dof_uy>, <dof_damage>
+**
+***************************************************************************
+** geometry, mesh, sets, etc.
+***************************************************************************
+**
+*INCLUDE,INPUT = element_dynamic.aba
+**
+***************************************************************************
+** Aufruf der Lastschritt-Datei
+***************************************************************************
+**
+*INCLUDE,input = LoadStep_dynamic.aba
+**
+***************************************************************************
+**

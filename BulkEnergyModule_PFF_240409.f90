@@ -15,20 +15,20 @@
 
 MODULE BulkEnergyModule
 
-!~   USE SplitEnergyModule, ONLY: HFEDpos => HFEDposNoSplit, &
-!~                                                d_HFEDpos_d_eps_e => d_HFEDposNoSplit_d_eps_e, &
-!~                                                d_d_HFEDpos_d_eps_e_d_eps_e => d_d_HFEDposNoSplit_d_eps_e_d_eps_e, &
-!~                                                HFEDneg => HFEDnegNoSplit, &
-!~                                                d_HFEDneg_d_eps_e => d_HFEDnegNoSplit_d_eps_e, &
-!~                                                d_d_HFEDneg_d_eps_e_d_eps_e => d_d_HFEDnegNoSplit_d_eps_e_d_eps_e
+  USE SplitEnergyModule, ONLY: HFEDpos => HFEDposNoSplit, &
+                                               d_HFEDpos_d_eps_e => d_HFEDposNoSplit_d_eps_e, &
+                                               d_d_HFEDpos_d_eps_e_d_eps_e => d_d_HFEDposNoSplit_d_eps_e_d_eps_e, &
+                                               HFEDneg => HFEDnegNoSplit, &
+                                               d_HFEDneg_d_eps_e => d_HFEDnegNoSplit_d_eps_e, &
+                                               d_d_HFEDneg_d_eps_e_d_eps_e => d_d_HFEDnegNoSplit_d_eps_e_d_eps_e
                                                
 
-  USE SplitEnergyModule, ONLY: HFEDpos => HFEDposAmorSplit, &
-                                               d_HFEDpos_d_eps_e => d_HFEDposAmorSplit_d_eps_e, &
-                                               d_d_HFEDpos_d_eps_e_d_eps_e => d_d_HFEDposAmorSplit_d_eps_e_d_eps_e, &
-                                               HFEDneg => HFEDnegAmorSplit, &
-                                               d_HFEDneg_d_eps_e => d_HFEDnegAmorSplit_d_eps_e, &
-                                               d_d_HFEDneg_d_eps_e_d_eps_e => d_d_HFEDnegAmorSplit_d_eps_e_d_eps_e
+!~   USE SplitEnergyModule, ONLY: HFEDpos => HFEDposAmorSplit, &
+!~                                                d_HFEDpos_d_eps_e => d_HFEDposAmorSplit_d_eps_e, &
+!~                                                d_d_HFEDpos_d_eps_e_d_eps_e => d_d_HFEDposAmorSplit_d_eps_e_d_eps_e, &
+!~                                                HFEDneg => HFEDnegAmorSplit, &
+!~                                                d_HFEDneg_d_eps_e => d_HFEDnegAmorSplit_d_eps_e, &
+!~                                                d_d_HFEDneg_d_eps_e_d_eps_e => d_d_HFEDnegAmorSplit_d_eps_e_d_eps_e
 
                                                
   USE DegradationFunctionModule, ONLY: degF => quad_degF, &
