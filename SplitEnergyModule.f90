@@ -536,6 +536,347 @@ MODULE SplitEnergyModule
 
     END FUNCTION d_d_HFEDnegAmorSplit_d_eps_e_d_eps_e
     
+!------------------------------------------------------------------------------------
+!
+!
+!
+! Liu et al MIXED MODE (2023) DOI: 10.1016/j.ijmecsci.2023.108368
+!
+! Mixed-Mode Formulation for Tension, Amor Split for Compression
+!
+!------------------------------------------------------------------------------------
+
+    REAL(kind=AbqRK) FUNCTION Gceff(Hsph, Hdev, nMixedModepar,parMixedModeMatrixPhase)
+    ! Psi pos Liu et al MIXED MODE (2023)
+
+      USE ABQINTERFACE_PF
+      USE FLOATNUMBERS
+      USE TensorModule
+
+      IMPLICIT NONE
+      INTEGER(kind=AbqIK), INTENT(IN) :: nMixedModepar
+      REAL(kind=AbqRK), INTENT(IN) :: parMixedModeMatrixPhase(nMixedModepar)
+      REAL(kind=AbqRK), INTENT(IN) :: Hsph, Hdev
+      REAL(kind=AbqRK) :: kappa, m, GcI, GcII
+      !
+      m = 2.6 ! Benzegaggh - Kenane mit empirischem Exponenten m
+      ! 2.6 ist der von Liu gewählte Wert aus dem Referenzpaper (Quelle 51 des Liu Papers)
+      !
+      !
+      kappa = 1e-7 ! numerical Parameter to avoid /0
+	  !
+      Gceff = zero
+      !
+      GcI               = parMixedModeMatrixPhase(1)
+      GcII              = parMixedModeMatrixPhase(2)
+      !
+      Gceff = GcI + (GcII-GcI) * (Hdev/(Hsph+Hdev + kappa)) ** m
+      
+    END FUNCTION Gceff
+    
+!------------------------------------------------------------------------------------
+
+    REAL(kind=AbqRK) FUNCTION CorrectionFactor(Hsph, Hdev, nMixedModepar,parMixedModeMatrixPhase)
+    ! Psi pos Liu et al MIXED MODE (2023)
+
+      USE ABQINTERFACE_PF
+      USE FLOATNUMBERS
+      USE TensorModule
+
+      IMPLICIT NONE
+      INTEGER(kind=AbqIK), INTENT(IN) :: nMixedModepar
+      REAL(kind=AbqRK), INTENT(IN) :: parMixedModeMatrixPhase(nMixedModepar)
+      REAL(kind=AbqRK), INTENT(IN) :: Hsph, Hdev
+      REAL(kind=AbqRK) :: H, kappa, GcI, GcII, Gc
+      !
+	  !
+      CorrectionFactor = zero
+      !
+      kappa = 1e-7 ! numerical Parameter to avoid /0
+      !
+      GcI               = parMixedModeMatrixPhase(1)
+      GcII              = parMixedModeMatrixPhase(2)
+      !
+      Gc = Gceff(Hsph, Hdev, nMixedModepar,parMixedModeMatrixPhase)
+      !
+      H = (Hsph+Hdev)
+      !
+      !
+      CorrectionFactor = H*(GcI * GcII)/(Gc*(Hdev*GcI+Hsph*GcII) + kappa)
+      
+    END FUNCTION CorrectionFactor
+    
+!------------------------------------------------------------------------------------
+
+    REAL(kind=AbqRK) FUNCTION Heff(Hsph, Hdev, nMixedModepar,parMixedModeMatrixPhase)
+    ! Psi pos Liu et al MIXED MODE (2023)
+
+      USE ABQINTERFACE_PF
+      USE FLOATNUMBERS
+      USE TensorModule
+
+      IMPLICIT NONE
+      INTEGER(kind=AbqIK), INTENT(IN) :: nMixedModepar
+      REAL(kind=AbqRK), INTENT(IN) :: parMixedModeMatrixPhase(nMixedModepar)
+      REAL(kind=AbqRK), INTENT(IN) :: Hsph, Hdev
+      !
+      REAL(kind=AbqRK) :: Gc, kappa, GcI, GcII, alpha
+      !
+	  !
+      Heff = zero
+      !
+      GcI               = parMixedModeMatrixPhase(1)
+      GcII              = parMixedModeMatrixPhase(2)
+      !
+      alpha = CorrectionFactor(Hsph, Hdev, nMixedModepar,parMixedModeMatrixPhase)
+      !
+      Gc = Gceff(Hsph, Hdev, nMixedModepar,parMixedModeMatrixPhase)
+      !
+      !
+      IF (GcI .GT. zero .AND. GcII .GT. zero) THEN
+		Heff = (Hsph/GcI + Hdev/GcII) * alpha * Gc
+	  END IF
+      
+    END FUNCTION Heff
+    
+!------------------------------------------------------------------------------------
+
+    REAL(kind=AbqRK) FUNCTION HFEDposLiuMixedMode(eps,nHFEDpar,parHFEDMatrixPhase)
+    ! Psi pos Liu et al MIXED MODE (2023)
+
+      USE ABQINTERFACE_PF
+      USE FLOATNUMBERS
+      USE MathModul
+      USE TensorModule
+
+      IMPLICIT NONE
+      INTEGER(kind=AbqIK), INTENT(IN) :: nHFEDpar
+      REAL(kind=AbqRK), INTENT(IN) :: parHFEDMatrixPhase(nHFEDpar)
+      REAL(kind=AbqRK), INTENT(IN) :: eps(3,3)
+      REAL(kind=AbqRK) :: eps_e_i(3,3), eps_D(3,3), ETensor(3,3,3,3)
+      REAL(kind=AbqRK) :: E, nu, K, mu
+      !
+      HFEDposLiuMixedMode = zero
+      !
+      E               = parHFEDMatrixPhase(1)
+      nu              = parHFEDMatrixPhase(2)
+      !
+      mu              = half * one / (one + nu) * E
+      !
+      K = bulkModulus(nHFEDpar,parHFEDMatrixPhase)
+      !
+      !
+      eps_D = deviator(eps)
+      !
+      HFEDposLiuMixedMode = half * K * MacAulay(trace(eps)) ** two + mu * DOUBLECONTRACTIONTwoTwo(eps_D,eps_D)
+      
+    END FUNCTION HFEDposLiuMixedMode
+
+!------------------------------------------------------------------------------------
+
+    REAL(kind=AbqRK) FUNCTION HFEDnegLiuMixedMode(eps,nHFEDpar,parHFEDMatrixPhase)
+    ! Psi neg Liu et al MIXED MODE (2023)
+
+      USE ABQINTERFACE_PF
+      USE FLOATNUMBERS
+      USE MathModul
+      USE TensorModule
+
+      IMPLICIT NONE
+      INTEGER(kind=AbqIK), INTENT(IN) :: nHFEDpar
+      REAL(kind=AbqRK), INTENT(IN) :: parHFEDMatrixPhase(nHFEDpar)
+      REAL(kind=AbqRK), INTENT(IN) :: eps(3,3)
+      REAL(kind=AbqRK) :: eps_e_i(3,3), eps_D(3,3), ETensor(3,3,3,3)
+      REAL(kind=AbqRK) :: E, nu, K, mu
+      !
+      HFEDnegLiuMixedMode = zero
+      !
+      E               = parHFEDMatrixPhase(1)
+      nu              = parHFEDMatrixPhase(2)
+      !
+      mu              = half * one / (one + nu) * E
+      !
+      K = bulkModulus(nHFEDpar,parHFEDMatrixPhase)
+      !
+      !
+      eps_D = deviator(eps)
+      !
+      HFEDnegLiuMixedMode = half * K * MacAulay(-trace(eps)) ** two
+      
+    END FUNCTION HFEDnegLiuMixedMode
+
+!------------------------------------------------------------------------------------
+!
+!
+! 1. Ableitung
+!
+!
+!------------------------------------------------------------------------------------
+
+    REAL(kind=AbqRK) FUNCTION d_HFEDposLiuMixedMode_d_eps_e(eps,nHFEDpar,parHFEDMatrixPhase)
+    ! Psi pos Liu et al MIXED MODE (2023)
+
+      USE ABQINTERFACE_PF
+      USE FLOATNUMBERS
+      USE MathModul
+      USE TensorModule
+
+      IMPLICIT NONE
+      INTEGER(kind=AbqIK), INTENT(IN) :: nHFEDpar
+      REAL(kind=AbqRK), INTENT(IN) :: parHFEDMatrixPhase(nHFEDpar)
+      REAL(kind=AbqRK), INTENT(IN) :: eps(3,3)
+      REAL(kind=AbqRK) :: eps_e_i(3,3), eps_D(3,3), ETensor(3,3,3,3), Ident(3,3)
+      REAL(kind=AbqRK) :: E, nu, K, mu
+      DIMENSION d_HFEDposLiuMixedMode_d_eps_e(3,3)
+      !
+      d_HFEDposLiuMixedMode_d_eps_e = zero
+      !
+      E               = parHFEDMatrixPhase(1)
+      nu              = parHFEDMatrixPhase(2)
+      !
+      mu              = half * one / (one + nu) * E
+      !
+      K = bulkModulus(nHFEDpar,parHFEDMatrixPhase)
+      !
+      !
+      eps_D = deviator(eps)
+      !
+      ! Von n abhängig machen wenn Funktion auf 2/3D aktualisiert werden
+      Ident = Identity(3)
+      !Ident(3,3) = zero ! Für 2D tests
+      !
+      !
+      d_HFEDposLiuMixedMode_d_eps_e = K * MacAulay(trace(eps)) * Ident + two * mu * eps_D
+      !
+      !
+      ! DEBUG:
+!~       IF (Incrementnumber .GT. 524 .AND. Elementnumber .EQ. 33 .AND. Integrationpointnumber .EQ. 1) THEN
+!~ 		WRITE(6,*) '-----------------------------------------------'
+!~ 		WRITE(6,*) '----------Split Positive Amor------------------'
+!~ 		WRITE(6,*) '-----------------------------------------------'
+!~ 		WRITE(6,*) 'eps: ', eps
+!~ 		WRITE(6,*) 'eps deviatoric: ', eps
+!~ 		WRITE(6,*) 'K * MacAulay(trace(eps)) * Ident', K * MacAulay(trace(eps)) * Ident
+!~ 		WRITE(6,*) 'two * mu * eps_D', two * mu * eps_D
+!~ 		WRITE(6,*) '-----------------------------------------------'
+!~ 	  END IF
+      !
+    END FUNCTION d_HFEDposLiuMixedMode_d_eps_e
+
+!------------------------------------------------------------------------------------
+
+    REAL(kind=AbqRK) FUNCTION d_HFEDnegLiuMixedMode_d_eps_e(eps,nHFEDpar,parHFEDMatrixPhase)
+    ! Psi pos Liu et al MIXED MODE (2023)
+
+      USE ABQINTERFACE_PF
+      USE FLOATNUMBERS
+      USE MathModul
+      USE TensorModule
+
+      IMPLICIT NONE
+      INTEGER(kind=AbqIK), INTENT(IN) :: nHFEDpar
+      REAL(kind=AbqRK), INTENT(IN) :: parHFEDMatrixPhase(nHFEDpar)
+      REAL(kind=AbqRK), INTENT(IN) :: eps(3,3)
+      REAL(kind=AbqRK) :: eps_e_i(3,3), eps_D(3,3), ETensor(3,3,3,3), Ident(3,3)
+      REAL(kind=AbqRK) :: E, nu, K, mu
+      DIMENSION d_HFEDnegLiuMixedMode_d_eps_e(3,3)
+      !
+      d_HFEDnegLiuMixedMode_d_eps_e = zero
+      !
+      E               = parHFEDMatrixPhase(1)
+      nu              = parHFEDMatrixPhase(2)
+      !
+      mu              = half * one / (one + nu) * E
+      !
+      K = bulkModulus(nHFEDpar,parHFEDMatrixPhase)
+      !
+      !
+      eps_D = deviator(eps)
+      !
+      ! Von n abhängig machen wenn Funktion auf 2/3D aktualisiert werden
+      Ident = Identity(3)
+      !Ident(3,3) = zero ! Für 2D tests
+      !
+      !
+      d_HFEDnegLiuMixedMode_d_eps_e = - K * MacAulay(-trace(eps)) * Ident
+
+    END FUNCTION d_HFEDnegLiuMixedMode_d_eps_e
+
+!------------------------------------------------------------------------------------
+
+    REAL(kind=AbqRK) FUNCTION d_d_HFEDposLiuMixedMode_d_eps_e_d_eps_e(eps,nHFEDpar,parHFEDMatrixPhase)
+    ! Psi pos Liu et al MIXED MODE (2023)
+
+      USE ABQINTERFACE_PF
+      USE FLOATNUMBERS
+      USE MathModul
+      USE TensorModule
+
+      IMPLICIT NONE
+      INTEGER(kind=AbqIK), INTENT(IN) :: nHFEDpar
+      REAL(kind=AbqRK), INTENT(IN) :: parHFEDMatrixPhase(nHFEDpar)
+      REAL(kind=AbqRK), INTENT(IN) :: eps(3,3)
+      INTEGER(kind=AbqIK) :: i1,i2,i3
+      REAL(kind=AbqRK) :: eps_e_i(3,3), eps_D(3,3), ETensor(3,3,3,3),P_sph_dummy(3,3,3,3),P_dev_dummy(3,3,3,3),Split_dummy(3,3,3,3),Split_dummy_voigt(6,6),P_sph_dummy_voigt(6,6),P_dev_dummy_voigt(6,6)
+      REAL(kind=AbqRK) :: E, nu, K, mu
+      DIMENSION d_d_HFEDposLiuMixedMode_d_eps_e_d_eps_e(3,3,3,3)
+      !
+      d_d_HFEDposLiuMixedMode_d_eps_e_d_eps_e = zero
+      !
+      P_dev_dummy = zero
+      !
+      E               = parHFEDMatrixPhase(1)
+      nu              = parHFEDMatrixPhase(2)
+      !
+      mu              = half * one / (one + nu) * E
+      !
+      K = bulkModulus(nHFEDpar,parHFEDMatrixPhase)
+      !
+      !
+      eps_D = deviator(eps)
+      !
+      d_d_HFEDposLiuMixedMode_d_eps_e_d_eps_e = d_MacAulay(trace(eps)) * K * three * Projection_sph(1) + two * mu * Projection_dev(1)
+      !
+	  !
+    END FUNCTION d_d_HFEDposLiuMixedMode_d_eps_e_d_eps_e
+
+!------------------------------------------------------------------------------------
+
+    REAL(kind=AbqRK) FUNCTION d_d_HFEDnegLiuMixedMode_d_eps_e_d_eps_e(eps,nHFEDpar,parHFEDMatrixPhase)
+    ! Psi pos Liu et al MIXED MODE (2023)
+
+      USE ABQINTERFACE_PF
+      USE FLOATNUMBERS
+      USE MathModul
+      USE TensorModule
+
+      IMPLICIT NONE
+      INTEGER(kind=AbqIK), INTENT(IN) :: nHFEDpar
+      REAL(kind=AbqRK), INTENT(IN) :: parHFEDMatrixPhase(nHFEDpar)
+      REAL(kind=AbqRK), INTENT(IN) :: eps(3,3)
+      INTEGER(kind=AbqIK) :: i1,i2,i3 ! Debug print
+      REAL(kind=AbqRK) :: eps_e_i(3,3), eps_D(3,3), ETensor(3,3,3,3), Split_dummy(3,3,3,3), Split_dummy_voigt(6,6) ! dummy voigt
+      REAL(kind=AbqRK) :: E, nu, K, mu
+      DIMENSION d_d_HFEDnegLiuMixedMode_d_eps_e_d_eps_e(3,3,3,3)
+      !
+      d_d_HFEDnegLiuMixedMode_d_eps_e_d_eps_e = zero
+      !
+      E               = parHFEDMatrixPhase(1)
+      nu              = parHFEDMatrixPhase(2)
+      !
+      mu              = half * one / (one + nu) * E
+      !
+      K = bulkModulus(nHFEDpar,parHFEDMatrixPhase)
+      !
+      !
+      eps_D = deviator(eps)
+      !
+      d_d_HFEDnegLiuMixedMode_d_eps_e_d_eps_e = d_MacAulay(-trace(eps)) * K * three * Projection_sph(1)
+      !
+      !
+
+    END FUNCTION d_d_HFEDnegLiuMixedMode_d_eps_e_d_eps_e
+    
 !------------------------------------------------------------------------------
     
 END MODULE SplitEnergyModule

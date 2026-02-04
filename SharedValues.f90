@@ -14,17 +14,19 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 MODULE SharedValues
-
   USE ABQINTERFACE_PF
-  
-
   IMPLICIT NONE
-
+  
   ! Beispielvariablen (können jederzeit erweitert werden)
-  PUBLIC :: Incrementnumber,Elementnumber,Integrationpointnumber
+  PUBLIC :: Incrementnumber, Elementnumber, Integrationpointnumber
+  PUBLIC :: is_print_elem_sub, is_print_inc_sub, is_print_ip_sub
   
   INTEGER(kind=AbqIK) :: Incrementnumber
   INTEGER(kind=AbqIK) :: Elementnumber
   INTEGER(kind=AbqIK) :: Integrationpointnumber
-
+  
+  LOGICAL :: is_print_elem_sub
+  LOGICAL :: is_print_inc_sub
+  LOGICAL :: is_print_ip_sub
+  
 END MODULE SharedValues

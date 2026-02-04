@@ -115,26 +115,26 @@
       
       ! props:
       ! 
-      ! 0.
-      ! nCpFloat
-      ! 0.
-      ! Flag numerical Tangent (1 - yes, 0 - analytical)
-      ! E-Modulus
-      ! poissons ratio
-      ! gamma star (star convex split, de Lorenzis)
-      ! l0 (internal length)
-      ! Gc (fracture toughness)
-      ! Flag Solver (1 - monolithic, 2 - BFGS, 3 - staggered)
-      ! Flag Coupling terms (1 - use coupling terms, 2 - no coupling terms)
-      ! thickness (plain strain)
-      ! Flag print (1 - print, 2 - no print)
-      ! Flag check stress
-      ! Flag check tangent
-      ! viscous parameter Phase-Field (eta, viscous regularization, Miehe)
-      ! 0.
-      ! 0.
-      ! Flag dynamic step (1 - dynamic step, 0 - no dynamic terms)
-      ! density (for dynamic steps)
+      ! 1:   0.
+      ! 2:   nCpFloat
+      ! 3:   0.
+      ! 4:   Flag numerical Tangent (1 - yes, 0 - analytical)
+      ! 5:   E-Modulus
+      ! 6:   poissons ratio
+      ! 7:   gamma star (star convex split, de Lorenzis)
+      ! 8:   l0 (internal length)
+      ! 9:   Gc (fracture toughness)
+      ! 10:  Flag Solver (1 - monolithic, 2 - BFGS, 3 - staggered)
+      ! 11:  Flag Coupling terms (1 - use coupling terms, 2 - no coupling terms)
+      ! 12:  thickness (plain strain)
+      ! 13:  Flag print (1 - print, 2 - no print)
+      ! 14:  Flag check stress
+      ! 15:  Flag check tangent
+      ! 16:  viscous parameter Phase-Field (eta, viscous regularization, Miehe)
+      ! 17:  GcI
+      ! 18:  GcII
+      ! 19:  Flag dynamic step (1 - dynamic step, 0 - no dynamic terms)
+      ! 20:  density (for dynamic steps)
       !
       
       
@@ -149,6 +149,34 @@
 	  ! jprop6 = 0
 	  ! NDI, NSHR is determined in UELlib
 	  ! 
+	  IF (time(2) .EQ. zero) THEN
+		WRITE(6,*) '========================================'
+		WRITE(6,*) ' Check props array'
+		WRITE(6,*) '========================================'
+		WRITE(6,*) ' 1  dummy                 = ', props(1)
+		WRITE(6,*) ' 2  nCpFloat             = ', props(2)
+		WRITE(6,*) ' 3  dummy                = ', props(3)
+		WRITE(6,*) ' 4  Flag numerical Tangent= ', props(4)
+		WRITE(6,*) ' 5  E-Modulus            = ', props(5)
+		WRITE(6,*) ' 6  Poisson ratio        = ', props(6)
+		WRITE(6,*) ' 7  gamma star           = ', props(7)
+		WRITE(6,*) ' 8  l0                   = ', props(8)
+		WRITE(6,*) ' 9  Gc                   = ', props(9)
+		WRITE(6,*) '10  Flag Solver          = ', props(10)
+		WRITE(6,*) '11  Flag Coupling terms  = ', props(11)
+		WRITE(6,*) '12  thickness            = ', props(12)
+		WRITE(6,*) '13  Flag print           = ', props(13)
+		WRITE(6,*) '14  Flag check stress    = ', props(14)
+		WRITE(6,*) '15  Flag check tangent   = ', props(15)
+		WRITE(6,*) '16  eta (viscous PF)     = ', props(16)
+		WRITE(6,*) '17  GcI                  = ', props(17)
+		WRITE(6,*) '18  GcII                 = ', props(18)
+		WRITE(6,*) '19  Flag dynamic step    = ', props(19)
+		WRITE(6,*) '20  density              = ', props(20)
+		write(6,*) '========================================'
+	  END IF
+	  
+	  
 		
       SELECT CASE(lflags(3))
       CASE(1)
@@ -183,19 +211,35 @@
       END SELECT
       
       ! DYNAMIC Parameters
-      prop_dynamic = props(19)
-      prop_density = props(20)
+      ! Initialize
+      prop_density = 0.
       
+      
+      prop_dynamic = props(19)
+      ! Dynamic Process?
       IF (prop_dynamic .GT. zero) THEN
 		isDynamic = .TRUE.
+		prop_density = props(20)
 	  END IF
+      
       
       
       ! Important to Make sure the Calculation of the Matrix_N is also conducted for Steps with k_M
       ! (see in Materialroutine: CALL SORT_SHAPEFUNC(...))
-      IF (k_M .AND. .NOT. isDynamic) THEN
-		WRITE(7,*) 'Tried to compute Mass Matrix but isDynamic is WRONG (Inputfile))'
-		CALL XEXIT()
+      IF (k_M) THEN
+		IF (.NOT. isDynamic .AND. prop_density .GT. zero) THEN
+		   WRITE(6,*) ''
+		   WRITE(6,*) '*****************************************************'
+		   WRITE(6,*) ' ACHTUNG: Statischer Step mit definierter Dichte!'
+		   WRITE(6,*) ' Es wurde kein dynamischer Step gewaehlt.'
+		   WRITE(6,*) ''
+		   WRITE(6,*) '   isDynamic   = ', isDynamic
+		   WRITE(6,*) '   prop_density= ', prop_density
+		   WRITE(6,*) ''
+		   WRITE(6,*) ' Die Masse wird daher ignoriert.'
+		   WRITE(6,*) '*****************************************************'
+		   WRITE(6,*) ''
+		END IF
 	  END IF
       
       ! number of nodal DOF
@@ -399,7 +443,6 @@
 
         rhs(1:ndofel,1) = fint
 
-!      END IF
 
       IF (k_M) THEN
       ! mass matrix

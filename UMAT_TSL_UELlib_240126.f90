@@ -53,8 +53,8 @@
 !                       9 -- parameter 1 of degradation function
 !                      10 -- parameter 2 of degradation function
 !                      11 -- viscous dissipation numerical parameter
-!                      12 -- 
-!                      13 -- 
+!                      12 -- GiI
+!                      13 -- GiII
 !                      14 -- 
 !                      15 -- 
 !
@@ -181,15 +181,15 @@ MODULE CZUMAT_module
 
 
       ! further variables
-      INTEGER(kind=AbqIK) :: D, i1, i2, pos_damage, pos_damageJump, pos_damageGradient, nIEDpar, nCEDpar, nVDEDpar, normalDirectionIndex
+      INTEGER(kind=AbqIK) :: D, i1, i2, pos_damage, pos_damageJump, pos_damageGradient, nIEDpar, nCEDpar, nVDEDpar, nMixedModeCZpar, normalDirectionIndex
       REAL(kind=AbqRK) :: damage, damage_old, damageJump
       REAL(kind=AbqRK) :: lambda
       REAL(kind=AbqRK) :: Hin, Hi, Himin
       REAL(kind=AbqRK) :: degFi ! Nur für svr Deg Funktion
-      REAL(kind=AbqRK) :: prop_l0, prop_t0, prop_delta0, prop_G0, prop_pen, prop_compressionstiffness, prop_df_one, prop_df_two, prop_visCZ
+      REAL(kind=AbqRK) :: prop_l0, prop_t0, prop_delta0, prop_G0, prop_pen, prop_compressionstiffness, prop_df_one, prop_df_two, prop_visCZ, prop_GiI, prop_GiII
       REAL(kind=AbqRK) :: totalPotential, cohesiveEnergy, cohesive_energy_H, interfaceEnergy, penaltyEnergy, contactEnergy, viscousEnergy, transformedStress(6)
       REAL(kind=AbqRK), ALLOCATABLE :: sep(:), sepGlobal(:), trac(:), damageGradient(:), damageGradientLocal(:), damageGradientGlobal(:), &
-                                       K(:,:), tmp(:), tmp2(:,:), parIEDMatrix(:), parCEDMatrix(:), parVDEDMatrix(:)
+                                       K(:,:), tmp(:), tmp2(:,:), parIEDMatrix(:), parCEDMatrix(:), parVDEDMatrix(:), parMixedModeCZMatrix(:)
       LOGICAL :: NAN_Check, debug_Flag, is_print_inc, is_print_elem, is_print_ip
 
       ! initialization
@@ -243,6 +243,8 @@ MODULE CZUMAT_module
       prop_df_one  = props_mat( 9) ! parameter 1 of degradation function
       prop_df_two  = props_mat(10) ! parameter 2 of degradation function
       prop_visCZ   = props_mat(11) ! parameter viscous dissipation
+      prop_GiI	   = props_mat(12) ! GiI
+      prop_GiII	   = props_mat(13) ! GiII
 	  ! arrays of material parameters
       !
       ! interface energy density -- see InterfaceEnergyModule.f90
@@ -260,6 +262,12 @@ MODULE CZUMAT_module
       nVDEDpar = 1
       ALLOCATE(parVDEDMatrix(nVDEDpar))
       parVDEDMatrix(1) = prop_visCZ
+      ! MixedMode Parameter
+      nMixedModeCZpar = 2
+      ALLOCATE(parMixedModeCZMatrix(nMixedModeCZpar))
+      parMixedModeCZMatrix(1) = prop_GiI
+      parMixedModeCZMatrix(2) = prop_GiII
+      
 	  
 !~ 	  IF (is_print_elem .AND. is_print_inc .AND. is_print_ip) THEN
 !~ 		  WRITE(6,*) '___________________________________'
@@ -272,6 +280,9 @@ MODULE CZUMAT_module
 !~ 		  WRITE(6,*) 'parCEDMatrix(3)', parCEDMatrix(3)
 !~ 		  WRITE(6,*) '======VDED======='
 !~ 		  WRITE(6,*) 'parVDEDMatrix(1)', parVDEDMatrix(1)
+!~ 		  WRITE(6,*) '=====Mixed======='
+!~ 		  WRITE(6,*) 'parMixedModeCZMatrix(1)', parMixedModeCZMatrix(1)
+!~ 		  WRITE(6,*) 'parMixedModeCZMatrix(2)', parMixedModeCZMatrix(2)
 !~ 		  WRITE(6,*) '_________________________________________'
 !~ 	  END IF
       ! model dimension
