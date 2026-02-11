@@ -40,15 +40,18 @@ fileArray[16]="PFUEL_lib_PFF_240103.f90"
 fileArray[17]="DegFunctionInterfaceModule.f90"
 fileArray[18]="InterfaceEnergyModule.f90"
 fileArray[19]="CZ_Parameters_240103.f90"
-fileArray[20]="CohesiveEnergyModule_normed_PFF_240126.f90" # Choose: normed / unnormed
-fileArray[21]="ContactEnergyModule_PFF_240126.f90"
-fileArray[22]="PenaltyEnergyModule_PFF_240109.f90"
-fileArray[23]="ViscousDissipationEnergyModule_CZ.f90" # Loeschen fuer originales 25.11.2025
-fileArray[24]="UMAT_TSL_UELlib_240126.f90"
-fileArray[25]="CZUELlibmodules_240126.f90"
-fileArray[26]="CZUEL_lib_240126.f90"
+fileArray[20]="SplitIntEnergyModule.f90"
+fileArray[21]="CohesiveEnergyModule_normed_PFF_240126.f90" # Choose: normed / unnormed
+# fileArray[21]="CohesiveEnergyEnergyModuleMixedMode.f90"
+fileArray[22]="ContactEnergyModule_PFF_240126.f90"
+fileArray[23]="PenaltyEnergyModule_PFF_240109.f90"
+fileArray[24]="ViscousDissipationEnergyModule_CZ.f90" # Loeschen fuer originales 25.11.2025
+fileArray[25]="AliasModuleCZ.f90"
+fileArray[26]="UMAT_TSL_UELlib_240126.f90"
+fileArray[27]="CZUELlibmodules_240126.f90"
+fileArray[28]="CZUEL_lib_240126.f90"
 # main file
-fileArray[27]="USER_MAIN_240103.f90"
+fileArray[29]="USER_MAIN_240103.f90"
 #
 # number of all files
 numFiles=${#fileArray[*]} 

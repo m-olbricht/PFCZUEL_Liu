@@ -149,9 +149,9 @@
 	  ! jprop6 = 0
 	  ! NDI, NSHR is determined in UELlib
 	  ! 
-	  IF (time(2) .EQ. zero) THEN
+	  IF (time(2) .EQ. zero .AND. jelem .EQ. one) THEN
 		WRITE(6,*) '========================================'
-		WRITE(6,*) ' Check props array'
+		WRITE(6,*) ' Check props array PF:'
 		WRITE(6,*) '========================================'
 		WRITE(6,*) ' 1  dummy                 = ', props(1)
 		WRITE(6,*) ' 2  nCpFloat             = ', props(2)

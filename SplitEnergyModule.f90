@@ -635,6 +635,8 @@ MODULE SplitEnergyModule
       !
       IF (GcI .GT. zero .AND. GcII .GT. zero) THEN
 		Heff = (Hsph/GcI + Hdev/GcII) * alpha * Gc
+	  ELSE
+	  
 	  END IF
       
     END FUNCTION Heff

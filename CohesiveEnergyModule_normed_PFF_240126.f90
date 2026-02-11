@@ -31,286 +31,227 @@ MODULE CohesiveEnergyModule
 !~                                            d_Degradation_d_damage => d_No_degF_d_phase, &
 !~                                            d_Degradation_d_damage_d_damage => d_d_No_degF_d_phase_d_phase    
 
+  USE SplitIntEnergyModule, ONLY: CZEDpos => CZEDposLiuMixedMode, &
+                                               d_CZEDpos_d_sep => d_CZEDposLiuMixedMode_d_sep, &
+                                               d_CZEDpos_d_sep_d_sep => d_CZEDposLiuMixedMode_d_sep_d_sep, &
+                                               CZEDneg => CZEDnegLiuMixedMode, &
+                                               d_CZEDneg_d_sep => d_CZEDnegLiuMixedMode_d_sep, &
+                                               d_CZEDneg_d_sep_d_sep => d_CZEDnegLiuMixedMode_d_sep_d_sep
+
+
   IMPLICIT NONE
 
   CONTAINS
 
-!------------------------------------------------------------------------------------
+!------------------------------------------------------------------------------------!
 
-    PURE REAL(kind=AbqRK) FUNCTION separation(D,normalDirectionIndex,sep)
-    ! separation (no negativ normal separation)
-
-      USE ABQINTERFACE
-      USE FLOATNUMBERS
-
-      IMPLICIT NONE
-      INTEGER(kind=AbqIK), INTENT(IN) :: D, normalDirectionIndex
-      REAL(kind=AbqRK), INTENT(IN) :: sep(D)
-      DIMENSION separation(D)
-      !
-      separation    = sep
-      ! positive normal separation
-      separation(normalDirectionIndex) = MacAulay(sep(normalDirectionIndex))
- 
-    END FUNCTION separation
-
-!------------------------------------------------------------------------------------
-
-    PURE REAL(kind=AbqRK) FUNCTION d_separation_d_sep(D,normalDirectionIndex,sep)
-    ! first derivative of separation (no negativ normal separation)
-
-      USE ABQINTERFACE
-      USE FLOATNUMBERS
-
-      IMPLICIT NONE
-      INTEGER(kind=AbqIK), INTENT(IN) :: D, normalDirectionIndex
-      REAL(kind=AbqRK), INTENT(IN) :: sep(D)
-      INTEGER(kind=AbqIK) :: i1
-      DIMENSION d_separation_d_sep(D,D)
-      !
-      d_separation_d_sep = zero
-      FORALL (i1=1:D)
-        d_separation_d_sep(i1,i1) = one
-      END FORALL
-      d_separation_d_sep(normalDirectionIndex,normalDirectionIndex) = d_MacAulay(sep(normalDirectionIndex))
-      
-    END FUNCTION d_separation_d_sep
-
-!------------------------------------------------------------------------------------
-
-    PURE REAL(kind=AbqRK) FUNCTION effSep(D,normalDirectionIndex,sep,prop_delta0)
-    ! normalized effective separation, no contribution from negative normal separation
-
-      USE ABQINTERFACE
-      USE FLOATNUMBERS
-
-      IMPLICIT NONE
-      INTEGER(kind=AbqIK), INTENT(IN) :: D, normalDirectionIndex
-      REAL(kind=AbqRK), INTENT(IN) :: sep(D), prop_delta0
-      INTEGER(kind=AbqIK) :: i1
-      REAL(kind=AbqRK) :: sepPos(D)
-      !
-      sepPos = separation(D,normalDirectionIndex,sep)
-      !
-      effSep = zero
-      DO i1=1,D
-        effSep = effSep + sepPos(i1)**two
-      END DO
-      effSep = sqrt(effSep) / prop_delta0
- 
-    END FUNCTION effSep
-
-!------------------------------------------------------------------------------------
-
-    PURE REAL(kind=AbqRK) FUNCTION d_effSep_d_sep(D,normalDirectionIndex,sep,prop_delta0)
-    ! normalized effective separation: first derivative w.r.t. separation coordinates
-
-      USE ABQINTERFACE
-      USE FLOATNUMBERS
-
-      IMPLICIT NONE
-      INTEGER(kind=AbqIK), INTENT(IN) :: D, normalDirectionIndex
-      REAL(kind=AbqRK), INTENT(IN) :: sep(D), prop_delta0
-      REAL(kind=AbqRK) :: lambda
-      REAL(kind=AbqRK) :: sepPos(D)
-      DIMENSION d_effSep_d_sep(D)
-      !
-      sepPos = separation(D,normalDirectionIndex,sep)
-      !
-      lambda = effSep(D,normalDirectionIndex,sep,prop_delta0)
-      !
-      d_effSep_d_sep = zero
-      IF (lambda .GT. zero) THEN
-        d_effSep_d_sep = sepPos / prop_delta0**2 / lambda
-      END IF
- 
-    END FUNCTION d_effSep_d_sep
-
-!------------------------------------------------------------------------------------
-
-    PURE REAL(kind=AbqRK) FUNCTION d_effSep_d_sep_d_sep(D,normalDirectionIndex,sep,prop_delta0)
-    ! normalized effective separation: second derivative w.r.t. separation coordinates
-
-      USE ABQINTERFACE
-      USE FLOATNUMBERS
-      USE TensorModule
-
-      IMPLICIT NONE
-      INTEGER(kind=AbqIK), INTENT(IN) :: D, normalDirectionIndex
-      REAL(kind=AbqRK), INTENT(IN) :: sep(D), prop_delta0
-      REAL(kind=AbqRK) :: lambda
-      INTEGER(kind=AbqIK) :: i1, i2
-      REAL(kind=AbqRK) :: sepPos(D)
-      DIMENSION d_effSep_d_sep_d_sep(D,D)
-      !
-      sepPos = separation(D,normalDirectionIndex,sep)
-      !
-      lambda = effSep(D,normalDirectionIndex,sep,prop_delta0)
-      !
-      d_effSep_d_sep_d_sep = zero
-      IF (lambda .GT. zero) THEN
-        FORALL (i1=1:D,i2=1:D)
-          d_effSep_d_sep_d_sep(i1,i2) = sepPos(i1)*sepPos(i2)
-        END FORALL
-        !
-        d_effSep_d_sep_d_sep = (d_separation_d_sep(D,normalDirectionIndex,sep) - d_effSep_d_sep_d_sep / prop_delta0**2 / lambda**2) / prop_delta0**2 / lambda
-      END IF
-
-    END FUNCTION d_effSep_d_sep_d_sep
-
-!------------------------------------------------------------------------------------
-
-    PURE REAL(kind=AbqRK) FUNCTION CZED_H(D,normalDirectionIndex,sep,prop_delta0,prop_t0)
+    REAL(kind=AbqRK) FUNCTION CZED(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase,damage,prop_df_one,prop_df_two)
     ! cohesive zone energy density
 
       USE ABQINTERFACE
       USE FLOATNUMBERS
 
       IMPLICIT NONE
-      INTEGER(kind=AbqIK), INTENT(IN) :: D, normalDirectionIndex
-      REAL(kind=AbqRK), INTENT(IN) :: sep(D), prop_delta0, prop_t0
-      REAL(kind=AbqRK) :: lambda
+      INTEGER(kind=AbqIK), INTENT(IN) :: nCEDpar, D, normalDirectionIndex, tangentialDirectionIndex
+      REAL(kind=AbqRK), INTENT(IN) :: parCEDMatrixPhase(nCEDpar)
+      REAL(kind=AbqRK), INTENT(IN) :: sep(D)
+      REAL(kind=AbqRK), INTENT(IN) :: damage, prop_df_one, prop_df_two
+      REAL(kind=AbqRK) :: CZEDtens, CZEDcomp, degi
       !
-      lambda = effSep(D,normalDirectionIndex,sep,prop_delta0)
+      CZEDtens = CZEDpos(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase)
       !
-      CZED_H = prop_t0*prop_delta0/two*lambda**2 
-      
-    END FUNCTION CZED_H
-
-!------------------------------------------------------------------------------------
-    PURE REAL(kind=AbqRK) FUNCTION CZED(D,normalDirectionIndex,sep,damage,prop_delta0,prop_t0,prop_df_one,prop_df_two)
-    ! cohesive zone energy density
-
-      USE ABQINTERFACE
-      USE FLOATNUMBERS
-
-      IMPLICIT NONE
-      INTEGER(kind=AbqIK), INTENT(IN) :: D, normalDirectionIndex
-      REAL(kind=AbqRK), INTENT(IN) :: sep(D), damage, prop_delta0, prop_t0, prop_df_one, prop_df_two
-      REAL(kind=AbqRK) :: lambda
+      CZEDcomp = CZEDneg(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase)
       !
-      lambda = effSep(D,normalDirectionIndex,sep,prop_delta0)
+      degi = Degradation(prop_df_one,prop_df_two,damage)
       !
-      CZED = prop_t0*prop_delta0/two*lambda**2 * Degradation(prop_df_one,prop_df_two,damage)
+      CZED = degi*CZEDtens + CZEDcomp
 
     END FUNCTION CZED
 
-!------------------------------------------------------------------------------------
+!------------------------------------------------------------------------------------!
+!------------------------------------------------------------------------------------!
+!                               first derivatives
+!------------------------------------------------------------------------------------!
+!------------------------------------------------------------------------------------!
 
-    REAL(kind=AbqRK) FUNCTION d_CZED_d_sep(D,normalDirectionIndex,damage,sep,prop_delta0,prop_t0,prop_df_one,prop_df_two)
+    REAL(kind=AbqRK) FUNCTION d_CZED_d_sep(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase,damage,prop_df_one,prop_df_two)
     ! cohesive zone energy density: first derivative w.r.t. separation coordinates
 
       USE ABQINTERFACE
       USE FLOATNUMBERS
 
       IMPLICIT NONE
-      INTEGER(kind=AbqIK), INTENT(IN) :: D, normalDirectionIndex
-      REAL(kind=AbqRK), INTENT(IN) :: sep(D), damage, prop_delta0, prop_t0, prop_df_one, prop_df_two
-      REAL(kind=AbqRK) :: lambda
+      INTEGER(kind=AbqIK), INTENT(IN) :: nCEDpar, D, normalDirectionIndex, tangentialDirectionIndex
+      REAL(kind=AbqRK), INTENT(IN) :: parCEDMatrixPhase(nCEDpar)
+      REAL(kind=AbqRK), INTENT(IN) :: sep(D)
+      REAL(kind=AbqRK), INTENT(IN) :: damage, prop_df_one, prop_df_two
+      REAL(kind=AbqRK) :: d_CZEDtens_d_sep(D),d_CZEDcomp_d_sep(D)
+      REAL(kind=AbqRK) :: degi
       DIMENSION d_CZED_d_sep(D)
       !
-      lambda = effSep(D,normalDirectionIndex,sep,prop_delta0)
+      d_CZEDtens_d_sep = d_CZEDpos_d_sep(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase)
       !
-      d_CZED_d_sep = prop_t0*prop_delta0*lambda * d_effSep_d_sep(D,normalDirectionIndex,sep,prop_delta0) * Degradation(prop_df_one,prop_df_two,damage)
-!~       IF (Incrementnumber .GE. 1 .AND. Elementnumber .EQ. 1 .AND. Integrationpointnumber .EQ. 1) THEN
-!~ 	    WRITE(7,*) "========================================"
-!~ 	    WRITE(7,*) "d_CZED_d_sep => TRAC"
-!~ 	    WRITE(7,*) "Incrementnumber", Incrementnumber
-!~ 	    WRITE(7,*) "Elementnumber", Elementnumber
-!~ 	    WRITE(7,*) "IPTnumber", Integrationpointnumber
-!~ 	    WRITE(7,*) "========================================"
-!~ 	    WRITE(7,*) "sep: ", sep(:)
-!~ 	    WRITE(7,*) "phase ", damage
-!~ 	    WRITE(7,*) "lambda: ", lambda
-!~ 	    WRITE(7,*) "Degrad: ", Degradation(prop_df_one,prop_df_two,damage)
-!~ 	    WRITE(7,*) "d_lambda_d_sep: ", d_effSep_d_sep(D,normalDirectionIndex,sep,prop_delta0)
-!~ 	    WRITE(7,*) "========================================"
-!~ 	  END IF
+      d_CZEDcomp_d_sep = d_CZEDneg_d_sep(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase)
+      !
+      degi = Degradation(prop_df_one,prop_df_two,damage)
+      !
+      d_CZED_d_sep = degi*d_CZEDtens_d_sep + d_CZEDcomp_d_sep
 
     END FUNCTION d_CZED_d_sep
 
 !------------------------------------------------------------------------------------
 
-    PURE REAL(kind=AbqRK) FUNCTION d_CZED_d_sep_d_sep(D,normalDirectionIndex,damage,sep,prop_delta0,prop_t0,prop_df_one,prop_df_two)
-    ! cohesive zone energy density: second derivative w.r.t. separation coordinates
+    REAL(kind=AbqRK) FUNCTION d_CZED_d_damage(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase,damage,prop_df_one,prop_df_two)
+    ! cohesive zone energy density: mixed second derivative w.r.t. separation coordinates and damage
 
       USE ABQINTERFACE
       USE FLOATNUMBERS
-      USE TensorModule
+      USE SplitIntEnergyModule
 
       IMPLICIT NONE
-      INTEGER(kind=AbqIK), INTENT(IN) :: D, normalDirectionIndex
-      REAL(kind=AbqRK), INTENT(IN) :: sep(D), damage, prop_delta0, prop_t0, prop_df_one, prop_df_two
-      INTEGER(kind=AbqIK) :: i1, i2
-      REAL(kind=AbqRK) :: lambda, d_lambda_d_sep(D)
-      DIMENSION d_CZED_d_sep_d_sep(D,D)
+      INTEGER(kind=AbqIK), INTENT(IN) :: nCEDpar, D, normalDirectionIndex, tangentialDirectionIndex
+      REAL(kind=AbqRK), INTENT(IN) :: parCEDMatrixPhase(nCEDpar)
+      REAL(kind=AbqRK), INTENT(IN) :: sep(D)
+      REAL(kind=AbqRK), INTENT(IN) :: damage, prop_df_one, prop_df_two
+      REAL(kind=AbqRK) :: CZEDtens, d_degi_d_damage
+      REAL(kind=AbqRK) :: degi
+	  !
+	  CZEDtens = CZEDpos(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase)
       !
-      lambda = effSep(D,normalDirectionIndex,sep,prop_delta0)
+      d_degi_d_damage = d_Degradation_d_damage(prop_df_one,prop_df_two,damage)
       !
-      d_lambda_d_sep = d_effSep_d_sep(D,normalDirectionIndex,sep,prop_delta0)
-      !
-      d_CZED_d_sep_d_sep = zero
-      FORALL (i1=1:D,i2=1:D)
-        d_CZED_d_sep_d_sep(i1,i2) = d_lambda_d_sep(i1)*d_lambda_d_sep(i2)
-      END FORALL
-      !
-      d_CZED_d_sep_d_sep = prop_t0*prop_delta0 * (d_CZED_d_sep_d_sep + lambda*d_effSep_d_sep_d_sep(D,normalDirectionIndex,sep,prop_delta0)) &
-                                               * Degradation(prop_df_one,prop_df_two,damage)
+      d_CZED_d_damage = CZEDtens * d_degi_d_damage
+	  
 
-    END FUNCTION d_CZED_d_sep_d_sep
-
+    END FUNCTION d_CZED_d_damage
+    
 !------------------------------------------------------------------------------------
 
-    PURE REAL(kind=AbqRK) FUNCTION d_CZED_d_sep_d_damage(D,normalDirectionIndex,damage,sep,prop_delta0,prop_t0,prop_df_one,prop_df_two)
+    REAL(kind=AbqRK) FUNCTION d_CZED_d_damage_Hi(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase,damage,prop_df_one,prop_df_two, Hi)
     ! cohesive zone energy density: mixed second derivative w.r.t. separation coordinates and damage
 
       USE ABQINTERFACE
       USE FLOATNUMBERS
 
       IMPLICIT NONE
-      INTEGER(kind=AbqIK), INTENT(IN) :: D, normalDirectionIndex
-      REAL(kind=AbqRK), INTENT(IN) :: sep(D), damage, prop_delta0, prop_t0, prop_df_one, prop_df_two
-      REAL(kind=AbqRK) :: lambda
+      INTEGER(kind=AbqIK), INTENT(IN) :: nCEDpar, D, normalDirectionIndex, tangentialDirectionIndex
+      REAL(kind=AbqRK), INTENT(IN) :: parCEDMatrixPhase(nCEDpar)
+      REAL(kind=AbqRK), INTENT(IN) :: sep(D)
+      REAL(kind=AbqRK), INTENT(IN) :: Hi
+      REAL(kind=AbqRK), INTENT(IN) :: damage, prop_df_one, prop_df_two
+      REAL(kind=AbqRK) :: degi
+	  !
+      !
+      d_CZED_d_damage_Hi = Hi * d_Degradation_d_damage(prop_df_one,prop_df_two,damage)
+	  
+
+    END FUNCTION d_CZED_d_damage_Hi
+
+!------------------------------------------------------------------------------------!
+!------------------------------------------------------------------------------------!
+!                               second derivatives
+!------------------------------------------------------------------------------------!
+!------------------------------------------------------------------------------------!
+
+    REAL(kind=AbqRK) FUNCTION d_CZED_d_sep_d_sep(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase,damage,prop_df_one,prop_df_two)
+    ! cohesive zone energy density: second derivative w.r.t. separation coordinates
+
+      USE ABQINTERFACE
+      USE FLOATNUMBERS
+
+      IMPLICIT NONE
+      INTEGER(kind=AbqIK), INTENT(IN) :: nCEDpar, D, normalDirectionIndex, tangentialDirectionIndex
+      REAL(kind=AbqRK), INTENT(IN) :: parCEDMatrixPhase(nCEDpar)
+      REAL(kind=AbqRK), INTENT(IN) :: sep(D)
+      REAL(kind=AbqRK), INTENT(IN) :: damage, prop_df_one, prop_df_two
+      REAL(kind=AbqRK) :: d_CZEDtens_d_sep_d_sep(D,D), d_CZEDcomp_d_sep_d_sep(D,D)
+      REAL(kind=AbqRK) :: degi
+      DIMENSION d_CZED_d_sep_d_sep(D,D)
+      !
+      d_CZED_d_sep_d_sep = zero
+      !
+      d_CZEDtens_d_sep_d_sep = d_CZEDpos_d_sep_d_sep(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase)
+      !
+      d_CZEDcomp_d_sep_d_sep = d_CZEDneg_d_sep_d_sep(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase)
+      !
+      degi = Degradation(prop_df_one,prop_df_two,damage)
+      !
+      d_CZED_d_sep_d_sep = degi*d_CZEDtens_d_sep_d_sep + d_CZEDcomp_d_sep_d_sep
+
+    END FUNCTION d_CZED_d_sep_d_sep
+
+
+!------------------------------------------------------------------------------------
+
+    REAL(kind=AbqRK) FUNCTION d_CZED_d_sep_d_damage(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase,damage,prop_df_one,prop_df_two)
+    ! partial derivative of the bulk energy w.r.t. strain and phase parameter
+    
+      USE ABQINTERFACE
+      USE FLOATNUMBERS
+      
+      IMPLICIT NONE
+      INTEGER(kind=AbqIK), INTENT(IN) :: nCEDpar, D, normalDirectionIndex, tangentialDirectionIndex
+      REAL(kind=AbqRK), INTENT(IN) :: parCEDMatrixPhase(nCEDpar)
+      REAL(kind=AbqRK), INTENT(IN) :: sep(D)
+      REAL(kind=AbqRK), INTENT(IN) :: damage, prop_df_one, prop_df_two
+      REAL(kind=AbqRK) :: d_CZEDtens_d_sep(D),d_CZEDcomp_d_sep(D)
+      REAL(kind=AbqRK) :: d_degi_d_damage
       DIMENSION d_CZED_d_sep_d_damage(D)
       !
-      lambda = effSep(D,normalDirectionIndex,sep,prop_delta0)
+      d_CZEDtens_d_sep = d_CZEDpos_d_sep(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase)
       !
-      d_CZED_d_sep_d_damage = prop_t0*prop_delta0*lambda * d_effSep_d_sep(D,normalDirectionIndex,sep,prop_delta0) &
-                                                         * d_Degradation_d_damage(prop_df_one,prop_df_two,damage)
+      d_CZEDcomp_d_sep = d_CZEDneg_d_sep(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase)
+      !
+      d_degi_d_damage = Degradation(prop_df_one,prop_df_two,damage)
+      !
+      d_CZED_d_sep_d_damage = d_degi_d_damage*d_CZEDtens_d_sep + d_CZEDcomp_d_sep
 
     END FUNCTION d_CZED_d_sep_d_damage
 
 !------------------------------------------------------------------------------------
 
-    REAL(kind=AbqRK) FUNCTION d_CZED_d_damage_H(D,normalDirectionIndex,damage,sep,prop_delta0,prop_t0,prop_df_one,prop_df_two,Hi)
-    ! cohesive zone energy density: first derivative w.r.t. damage variable
+    REAL(kind=AbqRK) FUNCTION d_CZED_d_damage_d_damage(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase,damage,prop_df_one,prop_df_two)
+    ! cohesive zone energy density: mixed second derivative w.r.t. separation coordinates and damage
 
       USE ABQINTERFACE
       USE FLOATNUMBERS
 
       IMPLICIT NONE
-      INTEGER(kind=AbqIK), INTENT(IN) :: D, normalDirectionIndex
-      REAL(kind=AbqRK), INTENT(IN) :: sep(D), damage, prop_delta0, prop_t0, prop_df_one, prop_df_two, Hi
+      INTEGER(kind=AbqIK), INTENT(IN) :: nCEDpar, D, normalDirectionIndex, tangentialDirectionIndex
+      REAL(kind=AbqRK), INTENT(IN) :: parCEDMatrixPhase(nCEDpar)
+      REAL(kind=AbqRK), INTENT(IN) :: sep(D)
+      REAL(kind=AbqRK), INTENT(IN) :: damage, prop_df_one, prop_df_two
+      REAL(kind=AbqRK) :: CZEDtens, d_degi_d_damage_d_damage
+	  !
+	  CZEDtens = CZEDpos(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase)
       !
-      d_CZED_d_damage_H = Hi * d_Degradation_d_damage(prop_df_one,prop_df_two,damage)
+      d_degi_d_damage_d_damage = d_Degradation_d_damage_d_damage(prop_df_one,prop_df_two,damage)
+      !
+      d_CZED_d_damage_d_damage = CZEDtens * d_degi_d_damage_d_damage
+	  
 
-    END FUNCTION d_CZED_d_damage_H
-
+    END FUNCTION d_CZED_d_damage_d_damage
+    
 !------------------------------------------------------------------------------------
 
-    PURE REAL(kind=AbqRK) FUNCTION d_CZED_d_damage_d_damage_H(D,normalDirectionIndex,damage,sep,prop_delta0,prop_t0,prop_df_one,prop_df_two,Hi)
-    ! cohesive zone energy density: second derivative w.r.t. damage variable
+    REAL(kind=AbqRK) FUNCTION d_CZED_d_damage_d_damage_Hi(sep, D, normalDirectionIndex, tangentialDirectionIndex, nCEDpar, parCEDMatrixPhase,damage,prop_df_one,prop_df_two, Hi)
+    ! cohesive zone energy density: mixed second derivative w.r.t. separation coordinates and damage
 
       USE ABQINTERFACE
       USE FLOATNUMBERS
 
       IMPLICIT NONE
-      INTEGER(kind=AbqIK), INTENT(IN) :: D, normalDirectionIndex
-      REAL(kind=AbqRK), INTENT(IN) :: sep(D), damage, prop_delta0, prop_t0, prop_df_one, prop_df_two, Hi
+      INTEGER(kind=AbqIK), INTENT(IN) :: nCEDpar, D, normalDirectionIndex, tangentialDirectionIndex
+      REAL(kind=AbqRK), INTENT(IN) :: parCEDMatrixPhase(nCEDpar)
+      REAL(kind=AbqRK), INTENT(IN) :: sep(D)
+      REAL(kind=AbqRK), INTENT(IN) :: Hi
+      REAL(kind=AbqRK), INTENT(IN) :: damage, prop_df_one, prop_df_two
+	  !
       !
-      d_CZED_d_damage_d_damage_H = Hi * d_Degradation_d_damage_d_damage(prop_df_one,prop_df_two,damage)
+      d_CZED_d_damage_d_damage_Hi = Hi * d_Degradation_d_damage_d_damage(prop_df_one,prop_df_two,damage)
+	  
 
-    END FUNCTION d_CZED_d_damage_d_damage_H
+    END FUNCTION d_CZED_d_damage_d_damage_Hi
 
 !------------------------------------------------------------------------------------
 

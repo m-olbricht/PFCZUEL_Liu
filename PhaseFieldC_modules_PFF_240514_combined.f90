@@ -117,15 +117,16 @@ MODULE PhaseField_module
 
       IMPLICIT NONE
       REAL(kind=AbqRK), INTENT(IN) :: props(numMatPar)
-      REAL(kind=AbqRK) :: prop_E, prop_nu, prop_gstar, prop_l0, prop_Gc
+      REAL(kind=AbqRK) :: prop_E, prop_nu, prop_gstar, prop_l0, prop_GcI, prop_GcII
 
       ! read material parameters from props
       prop_E      = props( 5) ! Young's modulus
       prop_nu     = props( 6) ! Poisson's ratio
       prop_gstar  = props( 7) ! gamma star, Parameter Star Split Alg
       prop_l0     = props( 8) ! internal length
-      prop_Gc     = props( 9) ! fracture toughness
-
+      prop_GcI     = props(17) ! fracture toughness I
+	  prop_GcII     = props(18) ! fracture toughness II
+	  
       ! parameter check
       IF (prop_E .LE. zero) THEN
         WRITE(7,*) "Young's modulus should exceed zero. EXIT", prop_E
@@ -146,8 +147,12 @@ MODULE PhaseField_module
         WRITE(7,*) "internal length must be positive. EXIT", prop_l0
         CALL XEXIT()
       END IF
-      IF (prop_Gc .LT. zero) THEN
-        WRITE(7,*) "fracture toughness must be positive. EXIT", prop_Gc
+      IF (prop_GcI .LT. zero) THEN
+        WRITE(7,*) "fracture toughness must be non negative. EXIT", prop_GcI
+        CALL XEXIT()
+      END IF
+      IF (prop_GcII .LT. zero) THEN
+        WRITE(7,*) "fracture toughness must be non negative. EXIT", prop_GcII
         CALL XEXIT()
       END IF
       !---------------------------------------!
@@ -253,6 +258,7 @@ MODULE PhaseField_module
 		  isStaggered = .TRUE.
 	  ELSE 
 		  WRITE(6,*) ' NO SOLVER FOUND, check solver variable (1 -> mon, 2 -> BFGS, 3 -> stag) '
+		  WRITE(7,*) ' NO SOLVER FOUND, check solver variable (1 -> mon, 2 -> BFGS, 3 -> stag) '
 		  CALL XEXIT()
 	  END IF 
       
@@ -531,9 +537,13 @@ MODULE PhaseField_module
       
       IF (ElasticEnergytens_sph .GT. Hn_sph) THEN
         H_sph = ElasticEnergytens_sph
-        H_dev = ElasticEnergytens_dev
       ELSE
         H_sph = Hn_sph
+      END IF 
+      
+      IF (ElasticEnergytens_sph .GT. Hn_dev) THEN
+        H_dev = ElasticEnergytens_dev
+      ELSE
         H_dev = Hn_dev
       END IF 
       
@@ -1177,7 +1187,7 @@ MODULE PhaseField_module
           
           !
           ! grad_phase: contributions of crack surface energy
-          temp(:) = d_CSED_d_grad_phase(phase(1),grad_phase(1,:),nCSEDpar,parCSEDMatrix)
+          temp(:) = d_CSED_d_grad_phase(phase(1),grad_phase(1,:),nCSEDpar,parCSED_MM_Matrix)
           stresses(pos_i1+1:pos_i1+D) = temp(1:D)
         END DO
         
@@ -1423,14 +1433,14 @@ MODULE PhaseField_module
             
             ! phase-grad_phase: contributions of surface crack energy
             temp1(:) = zero
-            temp1 = d_d_CSED_d_phase_d_grad_phase(phase(1),grad_phase(1,:),nCSEDpar,parCSEDMatrix)
+            temp1 = d_d_CSED_d_phase_d_grad_phase(phase(1),grad_phase(1,:),nCSEDpar,parCSED_MM_Matrix)
             tangent(pos_i1,pos_i2+1:pos_i2+D) = temp1(1:D)
             tangent(pos_i2+1:pos_i2+D,pos_i1) = tangent(pos_i1,pos_i2+1:pos_i2+D)
             !
             
             ! grad_phase-grad_phase: contributions of surface crack energy
             temp2(:,:) = zero
-            temp2(:,:) = d_d_CSED_d_grad_phase_d_grad_phase(phase(1),grad_phase(1,:),nCSEDpar,parCSEDMatrix)
+            temp2(:,:) = d_d_CSED_d_grad_phase_d_grad_phase(phase(1),grad_phase(1,:),nCSEDpar,parCSED_MM_Matrix)
             tangent(pos_i1+1:pos_i1+D,pos_i2+1:pos_i2+D) = temp2(1:D,1:D)
             tangent(pos_i2+1:pos_i2+D,pos_i1+1:pos_i1+D) = TRANSPOSE(tangent(pos_i1+1:pos_i1+D,pos_i2+1:pos_i2+D))
             !
